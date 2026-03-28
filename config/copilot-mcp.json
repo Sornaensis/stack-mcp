@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "stack_mcp": {
+      "type": "stdio",
+      "command": "{{STACK_MCP_EXE}}",
+      "args": []
+    }
+  }
+}

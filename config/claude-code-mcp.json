@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "stack_mcp": {
+      "command": "{{STACK_MCP_EXE}}",
+      "args": [],
+      "env": {}
+    }
+  }
+}

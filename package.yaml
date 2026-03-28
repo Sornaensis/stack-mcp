@@ -1,0 +1,78 @@
+name: stack-mcp
+version: 0.1.0.0
+synopsis: MCP server for Haskell Stack build tool
+description: An MCP (Model Context Protocol) server that exposes Stack build tool operations as tools for AI assistants.
+license: BSD-3-Clause
+author: ""
+maintainer: ""
+
+default-extensions:
+  - ImportQualifiedPost
+  - OverloadedStrings
+
+ghc-options:
+  - -Wall
+
+dependencies:
+  - base >= 4.20 && < 5
+  - aeson >= 2.2
+  - bytestring
+  - text
+  - process
+  - containers
+  - directory
+  - filepath
+
+library:
+  source-dirs: src
+
+executables:
+  stack-mcp:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - stack-mcp
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+
+  stack-mcp-install:
+    main: Install.hs
+    source-dirs: install
+    dependencies:
+      - base
+      - directory
+      - filepath
+      - process
+    ghc-options:
+      - -threaded
+
+tests:
+  stack-mcp-test:
+    main: Main.hs
+    source-dirs: test
+    dependencies:
+      - stack-mcp
+      - tasty
+      - tasty-hunit
+      - tasty-quickcheck
+      - QuickCheck
+      - vector
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+
+  stack-mcp-integration:
+    main: Integration.hs
+    source-dirs: test-integration
+    dependencies:
+      - stack-mcp
+      - tasty
+      - tasty-hunit
+      - temporary
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
