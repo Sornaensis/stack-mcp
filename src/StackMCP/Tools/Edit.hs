@@ -15,7 +15,7 @@ import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import System.Directory
     ( doesDirectoryExist, doesFileExist, listDirectory
-    , createDirectoryIfMissing, renameFile, removeDirectory )
+    , createDirectoryIfMissing, renameFile, removeDirectory, removeFile )
 import System.FilePath ((</>), takeExtension, takeDirectory, makeRelative, dropExtension)
 import StackMCP.Tools.Common
 
@@ -27,17 +27,31 @@ tools =
   , projectExposeModuleDef
   , projectRenameModuleDef
   , projectListModulesDef
+  , projectRemoveModuleDef
+  , projectAddExtraDepDef
+  , projectRemoveExtraDepDef
+  , projectSetGhcOptionsDef
+  , projectAddDefaultExtDef
+  , projectRemoveDefaultExtDef
+  , projectAddComponentDef
   ]
 
 dispatch :: IORef (Maybe FilePath) -> Text -> Value -> Maybe (IO ToolResult)
 dispatch cwdRef name params = case name of
-  "project_add_dependency"    -> Just $ withDir cwdRef (callAddDep params)
-  "project_remove_dependency" -> Just $ withDir cwdRef (callRemoveDep params)
-  "project_add_module"        -> Just $ withDir cwdRef (callAddModule params)
-  "project_expose_module"     -> Just $ withDir cwdRef (callExposeModule params)
-  "project_rename_module"     -> Just $ withDir cwdRef (callRenameModule params)
-  "project_list_modules"      -> Just $ withDir cwdRef (callListModules params)
-  _                           -> Nothing
+  "project_add_dependency"       -> Just $ withDir cwdRef (callAddDep params)
+  "project_remove_dependency"    -> Just $ withDir cwdRef (callRemoveDep params)
+  "project_add_module"           -> Just $ withDir cwdRef (callAddModule params)
+  "project_expose_module"        -> Just $ withDir cwdRef (callExposeModule params)
+  "project_rename_module"        -> Just $ withDir cwdRef (callRenameModule params)
+  "project_list_modules"         -> Just $ withDir cwdRef (callListModules params)
+  "project_remove_module"        -> Just $ withDir cwdRef (callRemoveModule params)
+  "project_add_extra_dep"        -> Just $ withDir cwdRef (callAddExtraDep params)
+  "project_remove_extra_dep"     -> Just $ withDir cwdRef (callRemoveExtraDep params)
+  "project_set_ghc_options"      -> Just $ withDir cwdRef (callSetGhcOptions params)
+  "project_add_default_extension"    -> Just $ withDir cwdRef (callAddDefaultExt params)
+  "project_remove_default_extension" -> Just $ withDir cwdRef (callRemoveDefaultExt params)
+  "project_add_component"        -> Just $ withDir cwdRef (callAddComponent params)
+  _                               -> Nothing
 
 -- | Read the cwdRef, fail if unset.  Catches exceptions from file I/O.
 withDir :: IORef (Maybe FilePath) -> (FilePath -> IO ToolResult) -> IO ToolResult
@@ -118,6 +132,70 @@ projectListModulesDef = ToolDef "project_list_modules"
         "Which source dirs to scan. Defaults to all."
         ["all", "library", "executable", "test"])
     ] []
+
+projectRemoveModuleDef :: ToolDef
+projectRemoveModuleDef = ToolDef "project_remove_module"
+  "Remove a Haskell module from the project. Deletes the source file, \
+  \removes from exposed-modules in package.yaml if listed, \
+  \and warns about any files that still import the module." $
+  mkSchema
+    [ ("module_name", strProp "Fully qualified module name to remove (e.g. \"Data.MyLib.Utils\").")
+    , ("source_dir", strProp "Source directory the module is in (e.g. \"src\", \"app\"). If omitted, searches all source dirs.")
+    ] ["module_name"]
+
+projectAddExtraDepDef :: ToolDef
+projectAddExtraDepDef = ToolDef "project_add_extra_dep"
+  "Add a package to extra-deps in stack.yaml. Used when a dependency isn't in the snapshot. \
+  \Accepts package-version format (e.g. \"acme-missiles-0.3\") or git references." $
+  mkSchema
+    [ ("package", strProp "Package spec to add (e.g. \"acme-missiles-0.3\", \"foo-1.2.3@sha256:abc...\").")
+    ] ["package"]
+
+projectRemoveExtraDepDef :: ToolDef
+projectRemoveExtraDepDef = ToolDef "project_remove_extra_dep"
+  "Remove a package from extra-deps in stack.yaml. Matches by package name prefix." $
+  mkSchema
+    [ ("package", strProp "Package name or name-version to remove (e.g. \"acme-missiles\" or \"acme-missiles-0.3\").")
+    ] ["package"]
+
+projectSetGhcOptionsDef :: ToolDef
+projectSetGhcOptionsDef = ToolDef "project_set_ghc_options"
+  "Set or update ghc-options in package.yaml. Replaces the entire ghc-options value \
+  \for the specified section. Use an empty string to remove ghc-options." $
+  mkSchema
+    [ ("options", strProp "GHC options string (e.g. \"-Wall -Wextra -Werror\"). Empty string removes the key.")
+    , ("section", enumProp
+        "Which section to set ghc-options in."
+        ["top-level", "library", "executables", "tests"])
+    ] ["options"]
+
+projectAddDefaultExtDef :: ToolDef
+projectAddDefaultExtDef = ToolDef "project_add_default_extension"
+  "Add a GHC language extension to default-extensions in package.yaml. \
+  \Adds to the top-level default-extensions list (shared by all components)." $
+  mkSchema
+    [ ("extension", strProp "Extension name (e.g. \"OverloadedStrings\", \"LambdaCase\").")
+    ] ["extension"]
+
+projectRemoveDefaultExtDef :: ToolDef
+projectRemoveDefaultExtDef = ToolDef "project_remove_default_extension"
+  "Remove a GHC language extension from default-extensions in package.yaml." $
+  mkSchema
+    [ ("extension", strProp "Extension name to remove (e.g. \"OverloadedStrings\").")
+    ] ["extension"]
+
+projectAddComponentDef :: ToolDef
+projectAddComponentDef = ToolDef "project_add_component"
+  "Add a new executable, test-suite, or benchmark component to package.yaml. \
+  \Creates the source directory and Main.hs file if they don't exist." $
+  mkSchema
+    [ ("name", strProp "Component name (e.g. \"my-app\", \"my-test-suite\").")
+    , ("type", enumProp "Component type."
+        ["executable", "test-suite", "benchmark"])
+    , ("source_dir", strProp "Source directory for the component (e.g. \"app\", \"test\"). Defaults based on type.")
+    , ("main_file", strProp "Main file name (default: \"Main.hs\").")
+    , ("dependencies", strProp "Comma-separated extra dependencies beyond the package itself (e.g. \"hspec,QuickCheck\").")
+    ] ["name", "type"]
 
 ------------------------------------------------------------------------
 -- package.yaml helpers (line-based, no YAML library needed)
@@ -789,3 +867,539 @@ cleanEmptyDirs srcRoot dir
             removeDirectory dir `catch` (\(_ :: SomeException) -> pure ())
             cleanEmptyDirs srcRoot (takeDirectory dir)
           else pure ()
+
+------------------------------------------------------------------------
+-- stack.yaml helpers
+------------------------------------------------------------------------
+
+-- | Read stack.yaml lines from a project directory.
+readStackYaml :: FilePath -> IO (Either Text [Text])
+readStackYaml dir = do
+  let path = dir </> "stack.yaml"
+  exists <- doesFileExist path
+  if not exists
+    then pure $ Left "No stack.yaml found in the project directory."
+    else do
+      content <- TIO.readFile path
+      pure $ Right (T.lines content)
+
+-- | Write stack.yaml back.
+writeStackYaml :: FilePath -> [Text] -> IO ()
+writeStackYaml dir lns =
+  TIO.writeFile (dir </> "stack.yaml") (T.unlines lns)
+
+------------------------------------------------------------------------
+-- project_remove_module implementation
+------------------------------------------------------------------------
+
+-- | Remove a module: delete file, remove from exposed-modules, warn about dangling imports.
+callRemoveModule :: Value -> FilePath -> IO ToolResult
+callRemoveModule params dir = do
+  let modName   = T.strip $ getParamText "module_name" params
+      srcDirParam = T.strip $ getParamText "source_dir" params
+  if T.null modName
+    then pure $ mkToolError "module_name parameter is required"
+    else if not (validModuleName modName)
+    then pure $ mkToolError ("Invalid module name: " <> modName)
+    else do
+      srcDirs <- if T.null srcDirParam
+                 then allSrcDirs dir
+                 else pure [T.unpack srcDirParam]
+      let relPath = moduleToPath modName
+      found <- findModuleIn dir srcDirs relPath
+      case found of
+        Nothing -> pure $ mkToolError ("Module not found: " <> modName)
+        Just (srcDir, fullPath) -> do
+          -- Delete the file
+          result <- try (removeFile fullPath) :: IO (Either SomeException ())
+          case result of
+            Left err -> pure $ mkToolError ("Failed to delete file: " <> T.pack (show err))
+            Right () -> do
+              -- Clean up empty parent directories
+              let srcRoot = dir </> srcDir
+              cleanEmptyDirs srcRoot (takeDirectory fullPath)
+              -- Remove from exposed-modules if present
+              exposedRemoved <- removeFromExposedModules dir modName
+              -- Find files that still import this module
+              allHs <- concatMapM (findHsFiles dir) =<< allSrcDirs dir
+              importers <- findImporters modName allHs
+              pure $ mkToolResultJSON $ object $
+                [ "success" .= True
+                , "module" .= modName
+                , "deleted_file" .= T.pack fullPath
+                , "exposed_modules_updated" .= exposedRemoved
+                ] ++ ["dangling_imports" .= importers | not (null importers)]
+
+-- | Remove a module from exposed-modules in package.yaml. Returns True if updated.
+removeFromExposedModules :: FilePath -> Text -> IO Bool
+removeFromExposedModules dir modName = do
+  ePkgYaml <- readPackageYaml dir
+  case ePkgYaml of
+    Right pkgLns ->
+      case findTopLevelKey "library" pkgLns of
+        Just libIdx -> do
+          let block = takeLibraryBlock libIdx pkgLns
+          case findSubKey "exposed-modules" libIdx block pkgLns of
+            Just emIdx -> do
+              let items = findListItems emIdx pkgLns
+                  matches = [i | (i, l) <- items,
+                             T.strip (T.drop 2 (T.stripStart l)) == modName]
+              case matches of
+                (matchIdx:_) -> do
+                  let newLns = take matchIdx pkgLns ++ drop (matchIdx + 1) pkgLns
+                  writePackageYaml dir newLns
+                  pure True
+                [] -> pure False
+            Nothing -> pure False
+        Nothing -> pure False
+    Left _ -> pure False
+
+-- | Find files that import a given module.
+findImporters :: Text -> [FilePath] -> IO [Text]
+findImporters modName files = do
+  results <- mapM checkFile files
+  pure (concat results)
+  where
+    checkFile path = do
+      result <- try (TIO.readFile path) :: IO (Either SomeException Text)
+      case result of
+        Left _ -> pure []
+        Right content ->
+          let lns = T.lines content
+              hasImport = any (importsModule modName) lns
+          in pure [T.pack path | hasImport]
+
+    importsModule modN line
+      | not (T.isPrefixOf "import" (T.stripStart line)) = False
+      | otherwise =
+          let ws = T.stripStart line
+              afterImport = T.stripStart (T.drop 6 ws)
+              afterQual
+                | T.isPrefixOf "qualified " afterImport = T.stripStart (T.drop 9 afterImport)
+                | otherwise = afterImport
+              modToken = T.takeWhile isModChar afterQual
+          in modToken == modN
+
+------------------------------------------------------------------------
+-- extra-deps management implementations
+------------------------------------------------------------------------
+
+-- | Add a package to extra-deps in stack.yaml.
+callAddExtraDep :: Value -> FilePath -> IO ToolResult
+callAddExtraDep params dir = do
+  let pkg = T.strip $ getParamText "package" params
+  if T.null pkg
+    then pure $ mkToolError "package parameter is required"
+    else do
+      eStackYaml <- readStackYaml dir
+      case eStackYaml of
+        Left err -> pure $ mkToolError err
+        Right lns -> do
+          -- Extract package base name (everything before last hyphen+version)
+          let pkgBase = extraDepBaseName pkg
+          case findTopLevelKey "extra-deps" lns of
+            Nothing -> do
+              -- No extra-deps key; append one
+              let newLines = lns ++ ["", "extra-deps:", "- " <> pkg]
+              writeStackYaml dir newLines
+              pure $ mkToolResultJSON $ object
+                [ "success" .= True, "action" .= ("added" :: Text)
+                , "package" .= pkg
+                , "note" .= ("Created new extra-deps section" :: Text)
+                ]
+            Just keyIdx -> do
+              let items = findListItems keyIdx lns
+                  existing = map (\(_, l) -> T.strip (T.drop 2 (T.stripStart l))) items
+                  alreadyPresent = any (\e -> extraDepBaseName e == pkgBase) existing
+              if alreadyPresent
+                then pure $ mkToolResultJSON $ object
+                  [ "success" .= True, "action" .= ("already_present" :: Text)
+                  , "package" .= pkgBase
+                  ]
+                else do
+                  let indent = listIndent keyIdx lns
+                      newLine = T.replicate indent " " <> "- " <> pkg
+                      insertAt = case items of
+                        [] -> keyIdx + 1
+                        _  -> fst (last items) + 1
+                      (before, after) = splitAt insertAt lns
+                      newLines = before ++ [newLine] ++ after
+                  writeStackYaml dir newLines
+                  pure $ mkToolResultJSON $ object
+                    [ "success" .= True, "action" .= ("added" :: Text)
+                    , "package" .= pkg
+                    ]
+
+-- | Remove a package from extra-deps in stack.yaml.
+callRemoveExtraDep :: Value -> FilePath -> IO ToolResult
+callRemoveExtraDep params dir = do
+  let pkg = T.strip $ getParamText "package" params
+  if T.null pkg
+    then pure $ mkToolError "package parameter is required"
+    else do
+      eStackYaml <- readStackYaml dir
+      case eStackYaml of
+        Left err -> pure $ mkToolError err
+        Right lns -> do
+          let pkgBase = extraDepBaseName pkg
+          case findTopLevelKey "extra-deps" lns of
+            Nothing -> pure $ mkToolResultJSON $ object
+              [ "success" .= False
+              , "message" .= ("No extra-deps section found in stack.yaml" :: Text)
+              ]
+            Just keyIdx -> do
+              let items = findListItems keyIdx lns
+                  matchIdx = [i | (i, l) <- items,
+                              let val = T.strip (T.drop 2 (T.stripStart l)),
+                              extraDepBaseName val == pkgBase]
+              case matchIdx of
+                [] -> pure $ mkToolResultJSON $ object
+                  [ "success" .= False
+                  , "message" .= ("Package not found in extra-deps: " <> pkgBase)
+                  ]
+                (i:_) -> do
+                  let afterRemove = take i lns ++ drop (i + 1) lns
+                      remaining = findListItems keyIdx afterRemove
+                      newLines = if null remaining && length items == 1
+                                 then take keyIdx afterRemove ++ drop (keyIdx + 1) afterRemove
+                                 else afterRemove
+                  writeStackYaml dir newLines
+                  pure $ mkToolResultJSON $ object
+                    [ "success" .= True, "action" .= ("removed" :: Text)
+                    , "package" .= pkg
+                    ]
+
+-- | Extract base package name from an extra-dep spec.
+--   "acme-missiles-0.3" -> "acme-missiles"
+--   "acme-missiles-0.3@sha256:..." -> "acme-missiles"
+--   "acme-missiles" -> "acme-missiles"
+extraDepBaseName :: Text -> Text
+extraDepBaseName spec =
+  let noHash = fst (T.breakOn "@" spec)
+      parts = T.splitOn "-" noHash
+  in case reverse parts of
+       (last':rest)
+         | not (T.null last') && T.all (\c -> c == '.' || (c >= '0' && c <= '9')) last'
+         -> T.intercalate "-" (reverse rest)
+       _ -> noHash
+
+------------------------------------------------------------------------
+-- ghc-options management implementation
+------------------------------------------------------------------------
+
+-- | Set ghc-options in package.yaml for a given section.
+callSetGhcOptions :: Value -> FilePath -> IO ToolResult
+callSetGhcOptions params dir = do
+  let opts    = getParamText "options" params
+      section = getParamText "section" params
+  ePkgYaml <- readPackageYaml dir
+  case ePkgYaml of
+    Left err -> pure $ mkToolError err
+    Right lns -> do
+      let sectionKey = case section of
+            "library"      -> Just "library"
+            "executables"  -> Just "executables"
+            "tests"        -> Just "tests"
+            _              -> Nothing  -- top-level
+      case sectionKey of
+        Nothing -> setGhcOptionsTopLevel lns opts dir
+        Just sk -> setGhcOptionsInSection lns sk opts dir
+
+setGhcOptionsTopLevel :: [Text] -> Text -> FilePath -> IO ToolResult
+setGhcOptionsTopLevel lns opts dir
+  | T.null opts = do
+      -- Remove ghc-options if present
+      case findTopLevelKey "ghc-options" lns of
+        Nothing -> pure $ mkToolResultJSON $ object
+          [ "success" .= True, "action" .= ("no_change" :: Text)
+          , "note" .= ("No ghc-options to remove" :: Text)
+          ]
+        Just keyIdx -> do
+          let newLines = take keyIdx lns ++ drop (keyIdx + 1) lns
+          writePackageYaml dir newLines
+          pure $ mkToolResultJSON $ object
+            [ "success" .= True, "action" .= ("removed" :: Text) ]
+  | otherwise = do
+      let newLine = "ghc-options: " <> opts
+      case findTopLevelKey "ghc-options" lns of
+        Nothing -> do
+          -- Insert after dependencies or at the end
+          let insertAt = case findTopLevelKey "dependencies" lns of
+                Just depIdx ->
+                  let items = findListItems depIdx lns
+                  in case items of
+                       [] -> depIdx + 1
+                       _  -> fst (last items) + 1
+                Nothing -> length lns
+              (before, after) = splitAt insertAt lns
+              newLines = before ++ ["", newLine] ++ after
+          writePackageYaml dir newLines
+          pure $ mkToolResultJSON $ object
+            [ "success" .= True, "action" .= ("added" :: Text)
+            , "options" .= opts
+            ]
+        Just keyIdx -> do
+          let newLines = take keyIdx lns ++ [newLine] ++ drop (keyIdx + 1) lns
+          writePackageYaml dir newLines
+          pure $ mkToolResultJSON $ object
+            [ "success" .= True, "action" .= ("updated" :: Text)
+            , "options" .= opts
+            ]
+
+setGhcOptionsInSection :: [Text] -> Text -> Text -> FilePath -> IO ToolResult
+setGhcOptionsInSection lns sectionKey opts dir =
+  case findTopLevelKey sectionKey lns of
+    Nothing -> pure $ mkToolError ("No " <> sectionKey <> " section found in package.yaml")
+    Just secIdx -> do
+      let block = takeLibraryBlock secIdx lns
+      case findSubKey "ghc-options" secIdx block lns of
+        Just goIdx
+          | T.null opts -> do
+              -- Remove the ghc-options line
+              let newLines = take goIdx lns ++ drop (goIdx + 1) lns
+              writePackageYaml dir newLines
+              pure $ mkToolResultJSON $ object
+                [ "success" .= True, "action" .= ("removed" :: Text)
+                , "section" .= sectionKey
+                ]
+          | otherwise -> do
+              -- Replace the line
+              let indent = T.length (T.takeWhile (== ' ') (lns !! goIdx))
+                  newLine = T.replicate indent " " <> "ghc-options: " <> opts
+                  newLines = take goIdx lns ++ [newLine] ++ drop (goIdx + 1) lns
+              writePackageYaml dir newLines
+              pure $ mkToolResultJSON $ object
+                [ "success" .= True, "action" .= ("updated" :: Text)
+                , "section" .= sectionKey, "options" .= opts
+                ]
+        Nothing
+          | T.null opts -> pure $ mkToolResultJSON $ object
+              [ "success" .= True, "action" .= ("no_change" :: Text)
+              , "note" .= ("No ghc-options to remove in " <> sectionKey)
+              ]
+          | otherwise -> do
+              let indent = inferBlockIndent block
+                  newLine = T.replicate indent " " <> "ghc-options: " <> opts
+                  insertAt = secIdx + 1
+                  (before, after) = splitAt insertAt lns
+                  newLines = before ++ [newLine] ++ after
+              writePackageYaml dir newLines
+              pure $ mkToolResultJSON $ object
+                [ "success" .= True, "action" .= ("added" :: Text)
+                , "section" .= sectionKey, "options" .= opts
+                ]
+
+------------------------------------------------------------------------
+-- default-extensions management implementations
+------------------------------------------------------------------------
+
+-- | Add a default extension to package.yaml.
+callAddDefaultExt :: Value -> FilePath -> IO ToolResult
+callAddDefaultExt params dir = do
+  let ext = T.strip $ getParamText "extension" params
+  if T.null ext
+    then pure $ mkToolError "extension parameter is required"
+    else do
+      ePkgYaml <- readPackageYaml dir
+      case ePkgYaml of
+        Left err -> pure $ mkToolError err
+        Right lns ->
+          case findTopLevelKey "default-extensions" lns of
+            Nothing -> do
+              -- Insert after ghc-options or dependencies or at end
+              let insertAt = case findTopLevelKey "ghc-options" lns of
+                    Just idx -> idx + 1
+                    Nothing -> case findTopLevelKey "dependencies" lns of
+                      Just depIdx ->
+                        let items = findListItems depIdx lns
+                        in case items of
+                             [] -> depIdx + 1
+                             _  -> fst (last items) + 1
+                      Nothing -> length lns
+                  (before, after) = splitAt insertAt lns
+                  newLines = before ++ ["", "default-extensions:", "- " <> ext] ++ after
+              writePackageYaml dir newLines
+              pure $ mkToolResultJSON $ object
+                [ "success" .= True, "action" .= ("added" :: Text)
+                , "extension" .= ext
+                , "note" .= ("Created new default-extensions section" :: Text)
+                ]
+            Just keyIdx -> do
+              let items = findListItems keyIdx lns
+                  existing = map (\(_, l) -> T.strip (T.drop 2 (T.stripStart l))) items
+              if ext `elem` existing
+                then pure $ mkToolResultJSON $ object
+                  [ "success" .= True, "action" .= ("already_present" :: Text)
+                  , "extension" .= ext
+                  ]
+                else do
+                  let indent = listIndent keyIdx lns
+                      newLine = T.replicate indent " " <> "- " <> ext
+                      insertAt = case items of
+                        [] -> keyIdx + 1
+                        _  -> fst (last items) + 1
+                      (before, after) = splitAt insertAt lns
+                      newLines = before ++ [newLine] ++ after
+                  writePackageYaml dir newLines
+                  pure $ mkToolResultJSON $ object
+                    [ "success" .= True, "action" .= ("added" :: Text)
+                    , "extension" .= ext
+                    ]
+
+-- | Remove a default extension from package.yaml.
+callRemoveDefaultExt :: Value -> FilePath -> IO ToolResult
+callRemoveDefaultExt params dir = do
+  let ext = T.strip $ getParamText "extension" params
+  if T.null ext
+    then pure $ mkToolError "extension parameter is required"
+    else do
+      ePkgYaml <- readPackageYaml dir
+      case ePkgYaml of
+        Left err -> pure $ mkToolError err
+        Right lns ->
+          case findTopLevelKey "default-extensions" lns of
+            Nothing -> pure $ mkToolResultJSON $ object
+              [ "success" .= False
+              , "message" .= ("No default-extensions section found" :: Text)
+              ]
+            Just keyIdx -> do
+              let items = findListItems keyIdx lns
+                  matchIdx = [i | (i, l) <- items,
+                              T.strip (T.drop 2 (T.stripStart l)) == ext]
+              case matchIdx of
+                [] -> pure $ mkToolResultJSON $ object
+                  [ "success" .= False
+                  , "message" .= ("Extension not found: " <> ext)
+                  ]
+                (i:_) -> do
+                  let afterRemove = take i lns ++ drop (i + 1) lns
+                      remaining = findListItems keyIdx afterRemove
+                      newLines = if null remaining && length items == 1
+                                 then take keyIdx afterRemove ++ drop (keyIdx + 1) afterRemove
+                                 else afterRemove
+                  writePackageYaml dir newLines
+                  pure $ mkToolResultJSON $ object
+                    [ "success" .= True, "action" .= ("removed" :: Text)
+                    , "extension" .= ext
+                    ]
+
+------------------------------------------------------------------------
+-- project_add_component implementation
+------------------------------------------------------------------------
+
+-- | Add a new executable, test-suite, or benchmark component to package.yaml.
+callAddComponent :: Value -> FilePath -> IO ToolResult
+callAddComponent params dir = do
+  let compName = T.strip $ getParamText "name" params
+      compType = T.strip $ getParamText "type" params
+      srcDirParam = T.strip $ getParamText "source_dir" params
+      mainFile = let m = T.strip $ getParamText "main_file" params
+                 in if T.null m then "Main.hs" else m
+      extraDeps = let d = getParamText "dependencies" params
+                  in if T.null d then [] else map T.strip (T.splitOn "," d)
+  if T.null compName
+    then pure $ mkToolError "name parameter is required"
+    else if compType `notElem` ["executable", "test-suite", "benchmark"]
+    then pure $ mkToolError "type must be one of: executable, test-suite, benchmark"
+    else do
+      ePkgYaml <- readPackageYaml dir
+      case ePkgYaml of
+        Left err -> pure $ mkToolError err
+        Right lns -> do
+          -- Determine the top-level section key and default source dir
+          let (sectionKey, defaultSrcDir) = case compType of
+                "executable"  -> ("executables", "app")
+                "test-suite"  -> ("tests", "test")
+                "benchmark"   -> ("benchmarks", "bench")
+                _             -> ("executables", "app")
+              srcDir = if T.null srcDirParam then defaultSrcDir else T.unpack srcDirParam
+
+          -- Detect package name from package.yaml for dependency
+          pkgName <- detectPackageName lns
+
+          -- Build the component YAML block
+          let componentLines = buildComponentBlock compName srcDir mainFile pkgName extraDeps
+
+          -- Insert into package.yaml
+          newLines <- case findTopLevelKey sectionKey lns of
+            Nothing -> do
+              -- No section yet; append at end
+              pure $ lns ++ ["", sectionKey <> ":"] ++ componentLines
+            Just secIdx -> do
+              -- Find end of this top-level section
+              let afterSec = drop (secIdx + 1) (zip [0..] lns)
+                  endIdx = case dropWhile (\(_, l) ->
+                             T.null (T.strip l) || T.isPrefixOf " " l || T.isPrefixOf "#" l
+                           ) afterSec of
+                             ((i, _):_) -> i
+                             []         -> length lns
+                  (before, after) = splitAt endIdx lns
+              pure $ before ++ [""] ++ componentLines ++ after
+
+          writePackageYaml dir newLines
+
+          -- Create the source directory and main file if they don't exist
+          let srcFullDir = dir </> srcDir
+              mainFullPath = srcFullDir </> T.unpack mainFile
+          createDirectoryIfMissing True srcFullDir
+          mainExists <- doesFileExist mainFullPath
+          if not mainExists
+            then do
+              let mainContent = case compType of
+                    "test-suite" -> T.unlines
+                      [ "module Main where"
+                      , ""
+                      , "main :: IO ()"
+                      , "main = putStrLn \"Test suite not yet implemented\""
+                      ]
+                    "benchmark" -> T.unlines
+                      [ "module Main where"
+                      , ""
+                      , "main :: IO ()"
+                      , "main = putStrLn \"Benchmark not yet implemented\""
+                      ]
+                    _ -> T.unlines
+                      [ "module Main where"
+                      , ""
+                      , "main :: IO ()"
+                      , "main = putStrLn \"Hello, World!\""
+                      ]
+              TIO.writeFile mainFullPath mainContent
+              pure $ mkToolResultJSON $ object
+                [ "success" .= True
+                , "component" .= compName
+                , "type" .= compType
+                , "source_dir" .= T.pack srcDir
+                , "main_file" .= mainFile
+                , "created_main" .= True
+                ]
+            else pure $ mkToolResultJSON $ object
+              [ "success" .= True
+              , "component" .= compName
+              , "type" .= compType
+              , "source_dir" .= T.pack srcDir
+              , "main_file" .= mainFile
+              , "created_main" .= False
+              ]
+
+-- | Build YAML lines for a new component under executables/tests/benchmarks.
+buildComponentBlock :: Text -> FilePath -> Text -> Text -> [Text] -> [Text]
+buildComponentBlock compName srcDir mainFile pkgName extraDeps =
+  let depLines = case extraDeps of
+        [] -> ["    dependencies:", "    - " <> pkgName]
+        _  -> ["    dependencies:", "    - " <> pkgName]
+           ++ ["    - " <> d | d <- extraDeps]
+  in [ "  " <> compName <> ":"
+     , "    main: " <> mainFile
+     , "    source-dirs: " <> T.pack srcDir
+     ] ++ depLines
+
+-- | Detect the package name from the 'name:' key in package.yaml.
+detectPackageName :: [Text] -> IO Text
+detectPackageName lns =
+  case findTopLevelKey "name" lns of
+    Just idx ->
+      let line = lns !! idx
+          after = T.strip (T.drop 1 (snd (T.breakOn ":" line)))
+      in pure after
+    Nothing -> pure "this-package"

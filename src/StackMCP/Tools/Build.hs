@@ -19,6 +19,7 @@ tools =
   , stackRunDef
   , stackCleanDef
   , stackPurgeDef
+  , stackHpcReportDef
   ]
 
 dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
@@ -30,8 +31,9 @@ dispatch mcwd name params = case name of
   "stack_install" -> Just $ callStackInstall mcwd params
   "stack_run"     -> Just $ callStackRun mcwd params
   "stack_clean"   -> Just $ callStackClean mcwd params
-  "stack_purge"   -> Just $ callStackPurge mcwd
-  _               -> Nothing
+  "stack_purge"      -> Just $ callStackPurge mcwd
+  "stack_hpc_report" -> Just $ callStackHpcReport mcwd params
+  _                  -> Nothing
 
 ------------------------------------------------------------------------
 -- Definitions
@@ -111,6 +113,17 @@ stackPurgeDef = ToolDef "stack_purge"
   "Delete all project Stack working directories (.stack-work). \
   \More aggressive than stack_clean — removes everything including snapshots." $
   mkSchema [] []
+
+stackHpcReportDef :: ToolDef
+stackHpcReportDef = ToolDef "stack_hpc_report"
+  "Generate a unified HPC code coverage report from .tix files produced by a previous --coverage test run. \
+  \Returns the report location. Use after stack_test with coverage=true." $
+  mkSchema
+    [ ("target", strProp "Specific target or .tix file. Omit to use the default project target.")
+    , ("all", boolProp "Use results from all packages and components involved in previous --coverage run (--all).")
+    , ("destdir", strProp "Output directory for the HTML report.")
+    , ("open", boolProp "Open the report in the browser (--open).")
+    ] []
 
 ------------------------------------------------------------------------
 -- Implementations
@@ -218,3 +231,22 @@ callStackPurge mcwd = do
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
     _ -> mkCommandError ["purge"] so
+
+callStackHpcReport :: Maybe FilePath -> Value -> IO ToolResult
+callStackHpcReport mcwd params = do
+  let target  = getParamText "target" params
+      allPkgs = getParamBool "all" params
+      destdir = getParamText "destdir" params
+      doOpen  = getParamBool "open" params
+      args = ["hpc", "report"]
+          ++ [target | not (T.null target)]
+          ++ ["--all" | allPkgs]
+          ++ ["--destdir" | not (T.null destdir)] ++ [destdir | not (T.null destdir)]
+          ++ ["--open" | doOpen]
+  so <- runStackRaw mcwd args
+  pure $ case soExitCode so of
+    0 -> mkToolResultJSON $ object
+           [ "success" .= True
+           , "output"  .= soStdout so
+           ]
+    _ -> mkCommandError args so

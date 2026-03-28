@@ -9,7 +9,14 @@ tools:
   - stack_mcp/project_add_module
   - stack_mcp/project_expose_module
   - stack_mcp/project_rename_module
+  - stack_mcp/project_remove_module
   - stack_mcp/project_list_modules
+  - stack_mcp/project_add_extra_dep
+  - stack_mcp/project_remove_extra_dep
+  - stack_mcp/project_set_ghc_options
+  - stack_mcp/project_add_default_extension
+  - stack_mcp/project_remove_default_extension
+  - stack_mcp/project_add_component
   - stack_mcp/stack_config_read
   - stack_mcp/stack_build
 ---
@@ -28,7 +35,14 @@ You are a specialized Haskell project editing agent. You manage dependencies and
 | `project_add_module` | Create a new Haskell module file (supports `source_dir` for app/test) |
 | `project_expose_module` | Add a module to exposed-modules in package.yaml |
 | `project_rename_module` | Rename a module, move file, rewrite imports, update exposed-modules |
+| `project_remove_module` | Delete a module file, update exposed-modules, warn about dangling imports |
 | `project_list_modules` | List all modules by source directory |
+| `project_add_extra_dep` | Add a package to extra-deps in stack.yaml (for deps outside the snapshot) |
+| `project_remove_extra_dep` | Remove a package from extra-deps in stack.yaml |
+| `project_set_ghc_options` | Set/update/remove ghc-options in package.yaml (top-level or per-section) |
+| `project_add_default_extension` | Add a GHC extension to default-extensions in package.yaml |
+| `project_remove_default_extension` | Remove a GHC extension from default-extensions |
+| `project_add_component` | Add a new executable, test-suite, or benchmark to package.yaml |
 | `stack_config_read` | Read package.yaml or other config files |
 | `stack_build` | Verify changes compile after editing |
 
@@ -52,6 +66,34 @@ You are a specialized Haskell project editing agent. You manage dependencies and
 
 1. `project_rename_module` with old and new names — this moves the file, updates the module header, rewrites all imports across the project, updates `exposed-modules` in package.yaml, and cleans up empty directories.
 2. `stack_build` to verify everything still compiles.
+
+### Removing a Module
+
+1. `project_remove_module` with the module name — deletes the file, removes from exposed-modules, reports dangling imports.
+2. Manually fix any files listed in `dangling_imports`.
+3. `stack_build` to verify.
+
+### Managing Extra Dependencies (stack.yaml)
+
+1. When a dependency isn't in the snapshot, use `project_add_extra_dep` with the package-version (e.g. `"acme-missiles-0.3"`).
+2. To remove: `project_remove_extra_dep` with the package name.
+3. `stack_build` to verify resolution.
+
+### Configuring GHC Options
+
+1. `project_set_ghc_options` with `options: "-Wall -Wextra"` and optionally `section: "library"` / `"tests"` / `"executables"`.
+2. Use an empty `options: ""` to remove ghc-options from a section.
+
+### Managing Default Extensions
+
+1. `project_add_default_extension` with `extension: "OverloadedStrings"`.
+2. `project_remove_default_extension` to remove one.
+
+### Adding a New Component
+
+1. `project_add_component` with `name`, `type` (executable/test-suite/benchmark), and optional `source_dir`, `main_file`, `dependencies`.
+2. Creates the source dir and Main.hs skeleton if needed.
+3. `stack_build` to verify.
 
 ### Check Before and After
 
