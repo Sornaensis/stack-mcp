@@ -5,6 +5,7 @@ tools:
   - stack_mcp/get_repo
   - stack_mcp/stack_pipeline
   - stack_mcp/stack_config_read
+  - agent
 agents:
   - stack-build
   - stack-project
