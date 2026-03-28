@@ -78,7 +78,7 @@ taskReadDef :: ToolDef
 taskReadDef = ToolDef "task_read"
   "Read accumulated stdout and stderr from a background task. Drains the buffers. Includes GHC diagnostics when the task has exited with errors." $
   mkSchema
-    [ ("task_id", strProp "The task ID returned by task_run/task_exec/task_ghc (required).")
+    [ ("task_id", strProp "The task ID returned by task_run/task_exec/task_ghci (required).")
     ] ["task_id"]
 
 taskWriteDef :: ToolDef

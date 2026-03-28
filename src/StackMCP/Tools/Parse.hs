@@ -6,10 +6,16 @@ module StackMCP.Tools.Parse
   , Severity(..)
   , parseGhcDiagnostics
   , diagnosticsSummary
+    -- * Dependency Errors
+  , DepError(..)
+  , parseDepErrors
+  , depErrorsSummary
     -- * Test Failures
   , TestFailure(..)
   , parseTestFailures
   , testFailuresSummary
+    -- * Helpers
+  , readInt
   ) where
 
 import Data.Aeson
@@ -139,6 +145,64 @@ diagnosticsSummary diags =
     , "error_count"   .= length errs
     , "warning_count" .= length warns
     ]
+
+------------------------------------------------------------------------
+-- Dependency Errors
+------------------------------------------------------------------------
+
+-- | A structured dependency resolution error from Stack.
+data DepError = DepError
+  { depPackage :: !Text      -- ^ e.g. "aeson-2.1.0.0"
+  , depMessage :: !Text      -- ^ full error message for this entry
+  } deriving (Show)
+
+instance ToJSON DepError where
+  toJSON d = object
+    [ "package" .= depPackage d
+    , "message" .= depMessage d
+    ]
+
+-- | Parse dependency resolution errors from Stack stderr.
+--   Handles patterns like:
+--
+--   * @In the dependencies for foo: aeson needed, but the stack configuration has no specified version@
+--   * @- aeson-2.1.0.0 from stack configuration does not match ...@
+--   * @Error: While constructing the build plan, the following exceptions were encountered:@
+parseDepErrors :: Text -> [DepError]
+parseDepErrors = go . T.lines
+  where
+    go [] = []
+    go (l:rest)
+      -- "In the dependencies for ...: <pkg> needed, but ..."
+      | "In the dependencies for " `T.isInfixOf` l
+      , Just pkg <- extractNeeded l =
+          DepError pkg (T.strip l) : go rest
+      -- "- <pkg>-<ver> from stack configuration does not match ..."
+      | Just stripped <- T.stripPrefix "- " (T.strip l)
+      , " from " `T.isInfixOf` stripped || " not found" `T.isInfixOf` stripped =
+          let pkg = T.takeWhile (/= ' ') stripped
+          in DepError pkg (T.strip l) : go rest
+      -- "<pkg> must match ..." (cabal solver style)
+      | " must match " `T.isInfixOf` l =
+          let pkg = T.takeWhile (/= ' ') (T.strip l)
+          in DepError pkg (T.strip l) : go rest
+      | otherwise = go rest
+
+    extractNeeded l =
+      case T.breakOn ": " (snd (T.breakOn "In the dependencies for " l)) of
+        (_, afterColon)
+          | not (T.null afterColon) ->
+              let rest' = T.drop 2 afterColon
+                  pkg = T.takeWhile (\c -> c /= ' ' && c /= ',') rest'
+              in if T.null pkg then Nothing else Just pkg
+          | otherwise -> Nothing
+
+-- | Produce a JSON summary of parsed dependency errors.
+depErrorsSummary :: [DepError] -> Value
+depErrorsSummary deps = object
+  [ "dependency_error_count" .= length deps
+  , "dependency_errors"      .= deps
+  ]
 
 ------------------------------------------------------------------------
 -- Test Failures

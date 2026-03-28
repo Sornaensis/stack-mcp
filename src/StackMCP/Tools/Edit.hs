@@ -18,6 +18,7 @@ import System.Directory
     , createDirectoryIfMissing, renameFile, removeDirectory, removeFile )
 import System.FilePath ((</>), takeExtension, takeDirectory, makeRelative, dropExtension)
 import StackMCP.Tools.Common
+import StackMCP.Types (ContentBlock(..), ToolResult(..))
 
 tools :: [ToolDef]
 tools =
@@ -34,23 +35,25 @@ tools =
   , projectAddDefaultExtDef
   , projectRemoveDefaultExtDef
   , projectAddComponentDef
+  , projectResolveModuleDef
   ]
 
 dispatch :: IORef (Maybe FilePath) -> Text -> Value -> Maybe (IO ToolResult)
 dispatch cwdRef name params = case name of
-  "project_add_dependency"       -> Just $ withDir cwdRef (callAddDep params)
-  "project_remove_dependency"    -> Just $ withDir cwdRef (callRemoveDep params)
-  "project_add_module"           -> Just $ withDir cwdRef (callAddModule params)
-  "project_expose_module"        -> Just $ withDir cwdRef (callExposeModule params)
-  "project_rename_module"        -> Just $ withDir cwdRef (callRenameModule params)
+  "project_add_dependency"       -> Just $ withReturnContent cwdRef params (callAddDep params)
+  "project_remove_dependency"    -> Just $ withReturnContent cwdRef params (callRemoveDep params)
+  "project_add_module"           -> Just $ withReturnContent cwdRef params (callAddModule params)
+  "project_expose_module"        -> Just $ withReturnContent cwdRef params (callExposeModule params)
+  "project_rename_module"        -> Just $ withReturnContent cwdRef params (callRenameModule params)
   "project_list_modules"         -> Just $ withDir cwdRef (callListModules params)
-  "project_remove_module"        -> Just $ withDir cwdRef (callRemoveModule params)
-  "project_add_extra_dep"        -> Just $ withDir cwdRef (callAddExtraDep params)
-  "project_remove_extra_dep"     -> Just $ withDir cwdRef (callRemoveExtraDep params)
-  "project_set_ghc_options"      -> Just $ withDir cwdRef (callSetGhcOptions params)
-  "project_add_default_extension"    -> Just $ withDir cwdRef (callAddDefaultExt params)
-  "project_remove_default_extension" -> Just $ withDir cwdRef (callRemoveDefaultExt params)
-  "project_add_component"        -> Just $ withDir cwdRef (callAddComponent params)
+  "project_remove_module"        -> Just $ withReturnContent cwdRef params (callRemoveModule params)
+  "project_add_extra_dep"        -> Just $ withReturnContent cwdRef params (callAddExtraDep params)
+  "project_remove_extra_dep"     -> Just $ withReturnContent cwdRef params (callRemoveExtraDep params)
+  "project_set_ghc_options"      -> Just $ withReturnContent cwdRef params (callSetGhcOptions params)
+  "project_add_default_extension"    -> Just $ withReturnContent cwdRef params (callAddDefaultExt params)
+  "project_remove_default_extension" -> Just $ withReturnContent cwdRef params (callRemoveDefaultExt params)
+  "project_add_component"        -> Just $ withReturnContent cwdRef params (callAddComponent params)
+  "project_resolve_module"       -> Just $ withDir cwdRef (callResolveModule params)
   _                               -> Nothing
 
 -- | Read the cwdRef, fail if unset.  Catches exceptions from file I/O.
@@ -62,9 +65,50 @@ withDir cwdRef action = do
     Just dir -> action dir `catch` (\(e :: SomeException) ->
       pure $ mkToolError ("Edit tool error: " <> T.pack (show e)))
 
+-- | Wrap a tool action so that when return_content is true in params,
+--   the modified package.yaml and/or stack.yaml content is appended to
+--   the result JSON under "package_yaml_content" / "stack_yaml_content".
+withReturnContent :: IORef (Maybe FilePath) -> Value -> (FilePath -> IO ToolResult) -> IO ToolResult
+withReturnContent cwdRef params action = do
+  result <- withDir cwdRef action
+  let wantContent = getParamBool "return_content" params
+  if not wantContent
+    then pure result
+    else do
+      mcwd <- readIORef cwdRef
+      case mcwd of
+        Nothing -> pure result
+        Just dir -> augmentWithContent dir result
+
+-- | If the result is successful, append file content blocks.
+augmentWithContent :: FilePath -> ToolResult -> IO ToolResult
+augmentWithContent dir (ToolResult blocks isErr) = do
+  if isErr then pure (ToolResult blocks isErr)
+  else do
+    let pkgPath = dir </> "package.yaml"
+        stackPath = dir </> "stack.yaml"
+    pkgContent <- safeRead pkgPath
+    stackContent <- safeRead stackPath
+    let extras = concat
+          [ [ContentBlock "text" ("[package.yaml]\n" <> c) | Just c <- [pkgContent]]
+          , [ContentBlock "text" ("[stack.yaml]\n" <> c) | Just c <- [stackContent]]
+          ]
+    pure $ ToolResult (blocks ++ extras) isErr
+  where
+    safeRead p = do
+      exists <- doesFileExist p
+      if not exists then pure Nothing
+      else (Just <$> TIO.readFile p) `catch` (\(_ :: SomeException) -> pure Nothing)
+
 ------------------------------------------------------------------------
 -- Definitions
 ------------------------------------------------------------------------
+
+-- | Like mkSchema but adds an optional return_content boolean param.
+mkEditSchema :: [(Text, Value)] -> [Text] -> Value
+mkEditSchema props req = mkSchema
+  (props ++ [("return_content", boolProp "If true, include the modified package.yaml and stack.yaml content in the response.")])
+  req
 
 projectAddDepDef :: ToolDef
 projectAddDepDef = ToolDef "project_add_dependency"
@@ -72,7 +116,7 @@ projectAddDepDef = ToolDef "project_add_dependency"
   \Defaults to the top-level 'dependencies' list (shared by all components). \
   \Use section='library' to add a library-specific dependency. \
   \If already present, reports without duplicating." $
-  mkSchema
+  mkEditSchema
     [ ("package", strProp "Package name (e.g. \"aeson\", \"text >= 2.0\").")
     , ("section", enumProp
         "Which section to add the dependency to. Defaults to top-level 'dependencies'."
@@ -84,7 +128,7 @@ projectRemoveDepDef = ToolDef "project_remove_dependency"
   "Remove a package dependency from the project's package.yaml. \
   \Defaults to removing from the top-level 'dependencies' list. \
   \Use section='library' to remove from the library-specific dependencies." $
-  mkSchema
+  mkEditSchema
     [ ("package", strProp "Package name to remove (matched by prefix, e.g. \"aeson\" matches \"aeson >= 2.0\").")
     , ("section", enumProp
         "Which section to remove from. Defaults to top-level 'dependencies'."
@@ -98,7 +142,7 @@ projectAddModuleDef = ToolDef "project_add_module"
   \Defaults to the library source directory. Use source_dir to target app/ or test/. \
   \Does NOT auto-add to exposed-modules (Hpack auto-discovers from source-dirs). \
   \Use project_expose_module if explicit exposed-modules are already configured." $
-  mkSchema
+  mkEditSchema
     [ ("module_name", strProp "Fully qualified module name (e.g. \"Data.MyLib.Utils\").")
     , ("content", strProp "Optional module content. If omitted, generates a minimal skeleton.")
     , ("source_dir", strProp "Source directory to create the module in (e.g. \"app\", \"test\"). Defaults to library source-dirs.")
@@ -109,7 +153,7 @@ projectExposeModuleDef = ToolDef "project_expose_module"
   "Add a module to the 'exposed-modules' list in the library section of package.yaml. \
   \Only needed if package.yaml already uses an explicit exposed-modules list. \
   \If no exposed-modules list exists yet, this creates one." $
-  mkSchema
+  mkEditSchema
     [ ("module_name", strProp "Fully qualified module name (e.g. \"Data.MyLib.Utils\").")
     ] ["module_name"]
 
@@ -118,7 +162,7 @@ projectRenameModuleDef = ToolDef "project_rename_module"
   "Rename a Haskell module: moves the file, updates the module declaration inside it, \
   \and rewrites import statements across all .hs files in the project source directories. \
   \Covers library, app, and test source-dirs." $
-  mkSchema
+  mkEditSchema
     [ ("old_name", strProp "Current fully qualified module name (e.g. \"Lib\").")
     , ("new_name", strProp "New fully qualified module name (e.g. \"MyLib.Core\").")
     ] ["old_name", "new_name"]
@@ -138,7 +182,7 @@ projectRemoveModuleDef = ToolDef "project_remove_module"
   "Remove a Haskell module from the project. Deletes the source file, \
   \removes from exposed-modules in package.yaml if listed, \
   \and warns about any files that still import the module." $
-  mkSchema
+  mkEditSchema
     [ ("module_name", strProp "Fully qualified module name to remove (e.g. \"Data.MyLib.Utils\").")
     , ("source_dir", strProp "Source directory the module is in (e.g. \"src\", \"app\"). If omitted, searches all source dirs.")
     ] ["module_name"]
@@ -147,14 +191,14 @@ projectAddExtraDepDef :: ToolDef
 projectAddExtraDepDef = ToolDef "project_add_extra_dep"
   "Add a package to extra-deps in stack.yaml. Used when a dependency isn't in the snapshot. \
   \Accepts package-version format (e.g. \"acme-missiles-0.3\") or git references." $
-  mkSchema
+  mkEditSchema
     [ ("package", strProp "Package spec to add (e.g. \"acme-missiles-0.3\", \"foo-1.2.3@sha256:abc...\").")
     ] ["package"]
 
 projectRemoveExtraDepDef :: ToolDef
 projectRemoveExtraDepDef = ToolDef "project_remove_extra_dep"
   "Remove a package from extra-deps in stack.yaml. Matches by package name prefix." $
-  mkSchema
+  mkEditSchema
     [ ("package", strProp "Package name or name-version to remove (e.g. \"acme-missiles\" or \"acme-missiles-0.3\").")
     ] ["package"]
 
@@ -162,7 +206,7 @@ projectSetGhcOptionsDef :: ToolDef
 projectSetGhcOptionsDef = ToolDef "project_set_ghc_options"
   "Set or update ghc-options in package.yaml. Replaces the entire ghc-options value \
   \for the specified section. Use an empty string to remove ghc-options." $
-  mkSchema
+  mkEditSchema
     [ ("options", strProp "GHC options string (e.g. \"-Wall -Wextra -Werror\"). Empty string removes the key.")
     , ("section", enumProp
         "Which section to set ghc-options in."
@@ -173,14 +217,14 @@ projectAddDefaultExtDef :: ToolDef
 projectAddDefaultExtDef = ToolDef "project_add_default_extension"
   "Add a GHC language extension to default-extensions in package.yaml. \
   \Adds to the top-level default-extensions list (shared by all components)." $
-  mkSchema
+  mkEditSchema
     [ ("extension", strProp "Extension name (e.g. \"OverloadedStrings\", \"LambdaCase\").")
     ] ["extension"]
 
 projectRemoveDefaultExtDef :: ToolDef
 projectRemoveDefaultExtDef = ToolDef "project_remove_default_extension"
   "Remove a GHC language extension from default-extensions in package.yaml." $
-  mkSchema
+  mkEditSchema
     [ ("extension", strProp "Extension name to remove (e.g. \"OverloadedStrings\").")
     ] ["extension"]
 
@@ -188,7 +232,7 @@ projectAddComponentDef :: ToolDef
 projectAddComponentDef = ToolDef "project_add_component"
   "Add a new executable, test-suite, or benchmark component to package.yaml. \
   \Creates the source directory and Main.hs file if they don't exist." $
-  mkSchema
+  mkEditSchema
     [ ("name", strProp "Component name (e.g. \"my-app\", \"my-test-suite\").")
     , ("type", enumProp "Component type."
         ["executable", "test-suite", "benchmark"])
@@ -196,6 +240,15 @@ projectAddComponentDef = ToolDef "project_add_component"
     , ("main_file", strProp "Main file name (default: \"Main.hs\").")
     , ("dependencies", strProp "Comma-separated extra dependencies beyond the package itself (e.g. \"hspec,QuickCheck\").")
     ] ["name", "type"]
+
+projectResolveModuleDef :: ToolDef
+projectResolveModuleDef = ToolDef "project_resolve_module"
+  "Resolve a Haskell module name to its absolute file path. \
+  \Searches all source directories (library, app, test) in the project. \
+  \Returns the full path and the source directory it was found in." $
+  mkSchema
+    [ ("module_name", strProp "Fully qualified module name (e.g. \"Data.MyLib.Utils\").")
+    ] ["module_name"]
 
 ------------------------------------------------------------------------
 -- package.yaml helpers (line-based, no YAML library needed)
@@ -889,6 +942,31 @@ writeStackYaml dir lns =
   TIO.writeFile (dir </> "stack.yaml") (T.unlines lns)
 
 ------------------------------------------------------------------------
+-- project_resolve_module implementation
+------------------------------------------------------------------------
+
+-- | Resolve a module name to its absolute file path.
+callResolveModule :: Value -> FilePath -> IO ToolResult
+callResolveModule params dir = do
+  let modName = T.strip $ getParamText "module_name" params
+  if T.null modName
+    then pure $ mkToolError "module_name parameter is required"
+    else if not (validModuleName modName)
+    then pure $ mkToolError ("Invalid module name: " <> modName)
+    else do
+      srcDirs <- allSrcDirs dir
+      let relPath = moduleToPath modName
+      found <- findModuleIn dir srcDirs relPath
+      case found of
+        Nothing -> pure $ mkToolError ("Module not found: " <> modName)
+        Just (srcDir, fullPath) -> pure $ mkToolResultJSON $ object
+          [ "module"      .= modName
+          , "file"        .= T.pack fullPath
+          , "source_dir"  .= T.pack srcDir
+          , "project_root" .= T.pack dir
+          ]
+
+------------------------------------------------------------------------
 -- project_remove_module implementation
 ------------------------------------------------------------------------
 
@@ -974,10 +1052,25 @@ findImporters modName files = do
       | otherwise =
           let ws = T.stripStart line
               afterImport = T.stripStart (T.drop 6 ws)
-              afterQual
-                | T.isPrefixOf "qualified " afterImport = T.stripStart (T.drop 9 afterImport)
+              -- Skip optional {-# ... #-} pragma (e.g. SOURCE)
+              afterSource
+                | T.isPrefixOf "{-#" afterImport =
+                    let (_, rest) = T.breakOn "#-}" afterImport
+                    in if T.null rest then afterImport
+                       else T.stripStart (T.drop 3 rest)
                 | otherwise = afterImport
-              modToken = T.takeWhile isModChar afterQual
+              afterQual
+                | T.isPrefixOf "qualified " afterSource = T.stripStart (T.drop 9 afterSource)
+                | otherwise = afterSource
+              -- Skip optional PackageImports string (e.g. "base")
+              afterPkgImport
+                | not (T.null afterQual) && T.head afterQual == '"' =
+                    let rest' = T.drop 1 afterQual
+                        (_, afterClose) = T.breakOn "\"" rest'
+                    in if T.null afterClose then afterQual
+                       else T.stripStart (T.drop 1 afterClose)
+                | otherwise = afterQual
+              modToken = T.takeWhile isModChar afterPkgImport
           in modToken == modN
 
 ------------------------------------------------------------------------
@@ -1115,7 +1208,11 @@ setGhcOptionsTopLevel lns opts dir
           , "note" .= ("No ghc-options to remove" :: Text)
           ]
         Just keyIdx -> do
-          let newLines = take keyIdx lns ++ drop (keyIdx + 1) lns
+          let items = findListItems keyIdx lns
+              removeEnd = case items of
+                            [] -> keyIdx + 1
+                            _  -> fst (last items) + 1
+              newLines = take keyIdx lns ++ drop removeEnd lns
           writePackageYaml dir newLines
           pure $ mkToolResultJSON $ object
             [ "success" .= True, "action" .= ("removed" :: Text) ]
@@ -1139,7 +1236,11 @@ setGhcOptionsTopLevel lns opts dir
             , "options" .= opts
             ]
         Just keyIdx -> do
-          let newLines = take keyIdx lns ++ [newLine] ++ drop (keyIdx + 1) lns
+          let items = findListItems keyIdx lns
+              removeEnd = case items of
+                            [] -> keyIdx + 1
+                            _  -> fst (last items) + 1
+              newLines = take keyIdx lns ++ [newLine] ++ drop removeEnd lns
           writePackageYaml dir newLines
           pure $ mkToolResultJSON $ object
             [ "success" .= True, "action" .= ("updated" :: Text)
@@ -1155,18 +1256,26 @@ setGhcOptionsInSection lns sectionKey opts dir =
       case findSubKey "ghc-options" secIdx block lns of
         Just goIdx
           | T.null opts -> do
-              -- Remove the ghc-options line
-              let newLines = take goIdx lns ++ drop (goIdx + 1) lns
+              -- Remove the ghc-options line and any list items under it
+              let items = findListItems goIdx lns
+                  removeEnd = case items of
+                                [] -> goIdx + 1
+                                _  -> fst (last items) + 1
+                  newLines = take goIdx lns ++ drop removeEnd lns
               writePackageYaml dir newLines
               pure $ mkToolResultJSON $ object
                 [ "success" .= True, "action" .= ("removed" :: Text)
                 , "section" .= sectionKey
                 ]
           | otherwise -> do
-              -- Replace the line
+              -- Replace the line (and remove any list items under it)
               let indent = T.length (T.takeWhile (== ' ') (lns !! goIdx))
                   newLine = T.replicate indent " " <> "ghc-options: " <> opts
-                  newLines = take goIdx lns ++ [newLine] ++ drop (goIdx + 1) lns
+                  items = findListItems goIdx lns
+                  removeEnd = case items of
+                                [] -> goIdx + 1
+                                _  -> fst (last items) + 1
+                  newLines = take goIdx lns ++ [newLine] ++ drop removeEnd lns
               writePackageYaml dir newLines
               pure $ mkToolResultJSON $ object
                 [ "success" .= True, "action" .= ("updated" :: Text)
@@ -1208,7 +1317,11 @@ callAddDefaultExt params dir = do
             Nothing -> do
               -- Insert after ghc-options or dependencies or at end
               let insertAt = case findTopLevelKey "ghc-options" lns of
-                    Just idx -> idx + 1
+                    Just idx ->
+                      let gitems = findListItems idx lns
+                      in case gitems of
+                           [] -> idx + 1
+                           _  -> fst (last gitems) + 1
                     Nothing -> case findTopLevelKey "dependencies" lns of
                       Just depIdx ->
                         let items = findListItems depIdx lns

@@ -17,6 +17,7 @@ tools:
   - stack_mcp/project_add_default_extension
   - stack_mcp/project_remove_default_extension
   - stack_mcp/project_add_component
+  - stack_mcp/project_resolve_module
   - stack_mcp/stack_config_read
   - stack_mcp/stack_build
 ---
@@ -43,6 +44,7 @@ You are a specialized Haskell project editing agent. You manage dependencies and
 | `project_add_default_extension` | Add a GHC extension to default-extensions in package.yaml |
 | `project_remove_default_extension` | Remove a GHC extension from default-extensions |
 | `project_add_component` | Add a new executable, test-suite, or benchmark to package.yaml |
+| `project_resolve_module` | Resolve a module name to its absolute file path |
 | `stack_config_read` | Read package.yaml or other config files |
 | `stack_build` | Verify changes compile after editing |
 

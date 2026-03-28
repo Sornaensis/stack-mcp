@@ -7,7 +7,7 @@ module StackMCP.Tools.Exec
 
 import Data.Text qualified as T
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary)
+import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary, parseDepErrors)
 
 tools :: [ToolDef]
 tools =
@@ -132,7 +132,8 @@ callStackGhci mcwd params = do
       flags   = T.words (getParamText "flags" params)
       args    = ["ghci"] ++ targets ++ ["--no-load" | noLoad] ++ flags
   so <- runStackRaw mcwd args
-  let diags = parseGhcDiagnostics (soStderr so)
+  let diags   = parseGhcDiagnostics (soStderr so)
+      depErrs = parseDepErrors (soStderr so)
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object
            [ "exit_code"   .= (0 :: Int)
@@ -140,7 +141,7 @@ callStackGhci mcwd params = do
            , "stderr"      .= soStderr so
            , "diagnostics" .= diagnosticsSummary diags
            ]
-    _ -> mkCommandError args so
+    _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
 
 callStackGhc :: Maybe FilePath -> Value -> IO ToolResult
 callStackGhc mcwd params = do
@@ -151,6 +152,7 @@ callStackGhc mcwd params = do
       let args = ["ghc", "--"] ++ ghcArgs
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
+          depErrs = parseDepErrors (soStderr so)
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object
                [ "exit_code"   .= (0 :: Int)
@@ -158,7 +160,7 @@ callStackGhc mcwd params = do
                , "stderr"      .= soStderr so
                , "diagnostics" .= diagnosticsSummary diags
                ]
-        _ -> mkCommandErrorWithDiags args so diags
+        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
 
 callStackEval :: Maybe FilePath -> Value -> IO ToolResult
 callStackEval mcwd params = do
@@ -169,6 +171,7 @@ callStackEval mcwd params = do
       let args = ["eval", expr]
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
+          depErrs = parseDepErrors (soStderr so)
           diagField = if null diags then [] else ["diagnostics" .= diagnosticsSummary diags]
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
@@ -176,7 +179,7 @@ callStackEval mcwd params = do
                , "result"    .= T.strip (soStdout so)
                , "stderr"    .= soStderr so
                ] ++ diagField
-        _ -> mkCommandErrorWithDiags args so diags
+        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
 
 callStackRunghc :: Maybe FilePath -> Value -> IO ToolResult
 callStackRunghc mcwd params = do
@@ -188,6 +191,7 @@ callStackRunghc mcwd params = do
       let args = ["runghc", "--", file] ++ rArgs
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
+          depErrs = parseDepErrors (soStderr so)
           diagField = if null diags then [] else ["diagnostics" .= diagnosticsSummary diags]
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
@@ -195,7 +199,7 @@ callStackRunghc mcwd params = do
                , "stdout"    .= soStdout so
                , "stderr"    .= soStderr so
                ] ++ diagField
-        _ -> mkCommandErrorWithDiags args so diags
+        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
 
 callStackScript :: Maybe FilePath -> Value -> IO ToolResult
 callStackScript mcwd params = do
@@ -210,6 +214,7 @@ callStackScript mcwd params = do
               ++ (if null rArgs then [] else "--" : rArgs)
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
+          depErrs = parseDepErrors (soStderr so)
           diagField = if null diags then [] else ["diagnostics" .= diagnosticsSummary diags]
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
@@ -217,7 +222,7 @@ callStackScript mcwd params = do
                , "stdout"    .= soStdout so
                , "stderr"    .= soStderr so
                ] ++ diagField
-        _ -> mkCommandErrorWithDiags args so diags
+        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
 
 callStackHoogle :: Maybe FilePath -> Value -> IO ToolResult
 callStackHoogle mcwd params = do
@@ -239,20 +244,27 @@ callStackHoogle mcwd params = do
     else pure $ Right ""
   case setupResult of
     Left err -> pure err
-    Right setupMsg -> do
-      let countArg = case count of
-            Just n  -> ["--count=" <> T.pack (show n)]
-            Nothing -> []
-          args = ["hoogle"] ++ [query | not (T.null query)]
-              ++ countArg
-              ++ flags
-      so <- runStackRaw mcwd args
-      case soExitCode so of
-        0 -> do
-          let ls = filter (not . T.null) $ T.lines (soStdout so)
-              setupField = if T.null setupMsg then [] else ["setup" .= setupMsg]
-          pure $ mkToolResultJSON $ object $
-            [ "count"   .= length ls
-            , "results" .= ls
-            ] ++ setupField
-        _ -> pure $ mkCommandError args so
+    Right setupMsg
+      | T.null query -> do
+          -- Setup-only: no search query provided
+          if T.null setupMsg
+            then pure $ mkToolError "query parameter is required (or set setup: true to build the Hoogle database)"
+            else pure $ mkToolResultJSON $ object
+                   [ "setup" .= setupMsg ]
+      | otherwise -> do
+          let countArg = case count of
+                Just n  -> ["--count=" <> T.pack (show n)]
+                Nothing -> []
+              args = ["hoogle", "--"] ++ [query]
+                  ++ countArg
+                  ++ flags
+          so <- runStackRaw mcwd args
+          case soExitCode so of
+            0 -> do
+              let ls = filter (not . T.null) $ T.lines (soStdout so)
+                  setupField = if T.null setupMsg then [] else ["setup" .= setupMsg]
+              pure $ mkToolResultJSON $ object $
+                [ "count"   .= length ls
+                , "results" .= ls
+                ] ++ setupField
+            _ -> pure $ mkCommandError args so

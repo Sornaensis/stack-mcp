@@ -41,7 +41,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import StackMCP.Types (ToolDef(..), ToolResult, mkToolResult, mkToolResultJSON, mkToolError, mkToolErrorJSON, mkStructuredError)
 import StackMCP.Process (runStackRaw, StackOutput(..))
-import StackMCP.Tools.Parse (GhcDiagnostic, parseGhcDiagnostics, diagnosticsSummary)
+import StackMCP.Tools.Parse (GhcDiagnostic, parseGhcDiagnostics, diagnosticsSummary, DepError, parseDepErrors, depErrorsSummary)
 
 ------------------------------------------------------------------------
 -- Parameter extraction
@@ -145,15 +145,17 @@ tagEach tag = concatMap (\a -> [tag, a])
 mkCommandError :: [Text] -> StackOutput -> ToolResult
 mkCommandError args so =
   let diags = parseGhcDiagnostics (soStderr so)
-  in mkCommandErrorWithDiags args so diags
+      depErrs = parseDepErrors (soStderr so)
+  in mkCommandErrorWithDiags args so diags depErrs Nothing
 
 -- | Standard structured error with pre-parsed diagnostics.
-mkCommandErrorWithDiags :: [Text] -> StackOutput -> [GhcDiagnostic] -> ToolResult
-mkCommandErrorWithDiags args so diags = mkToolErrorJSON $ object
+mkCommandErrorWithDiags :: [Text] -> StackOutput -> [GhcDiagnostic] -> [DepError] -> Maybe FilePath -> ToolResult
+mkCommandErrorWithDiags args so diags depErrs mcwd = mkToolErrorJSON $ object $
   [ "error_type"   .= ("command_failed" :: Text)
   , "exit_code"    .= soExitCode so
   , "command"      .= T.unwords ("stack" : args)
   , "diagnostics"  .= diagnosticsSummary diags
   , "raw_output"   .= soStdout so
   , "raw_stderr"   .= soStderr so
-  ]
+  ] ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
+    ++ maybe [] (\d -> ["project_root" .= T.pack d]) mcwd

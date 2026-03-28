@@ -13,7 +13,7 @@ import Data.Text.IO qualified as TIO
 import System.Directory (getCurrentDirectory, listDirectory, doesFileExist, canonicalizePath)
 import System.FilePath ((</>), takeExtension, normalise, isRelative, pathSeparator, splitDirectories, dropTrailingPathSeparator)
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary)
+import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary, parseDepErrors, depErrorsSummary)
 
 tools :: [ToolDef]
 tools =
@@ -75,6 +75,7 @@ callPipeline cwdRef params = do
       so <- runStackRaw mcwd' args
       let success = soExitCode so == 0
           diags   = parseGhcDiagnostics (soStderr so)
+          depErrs = parseDepErrors (soStderr so)
           result  = object $
             [ "step"    .= n
             , "command" .= ("stack " <> step)
@@ -82,6 +83,7 @@ callPipeline cwdRef params = do
             , "output"  .= soStdout so
             , "stderr"  .= soStderr so
             ] ++ ["diagnostics" .= diagnosticsSummary diags | not (null diags)]
+              ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
               ++ ["exit_code" .= soExitCode so | not success]
       if success
         then runPipeline mcwd' rest (n + 1) (result : acc)

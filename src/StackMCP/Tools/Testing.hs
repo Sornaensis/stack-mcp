@@ -3,11 +3,14 @@
 module StackMCP.Tools.Testing
   ( tools
   , dispatch
+  , parsedCounts
+  , parseHspecCounts
+  , parseTastyCounts
   ) where
 
 import Data.Text qualified as T
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseTestFailures, testFailuresSummary, parseGhcDiagnostics, diagnosticsSummary)
+import StackMCP.Tools.Parse (parseTestFailures, testFailuresSummary, parseGhcDiagnostics, diagnosticsSummary, readInt)
 
 tools :: [ToolDef]
 tools =
@@ -157,12 +160,14 @@ callTestRun mcwd params = do
           combined   = soStdout so <> "\n" <> soStderr so
           failures   = parseTestFailures combined
           diags      = parseGhcDiagnostics (soStderr so)
+          rootField  = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
           result     = object $
             [ "success" .= success
             , "suite"   .= suite
             , "output"  .= soStdout so
             , "stderr"  .= soStderr so
-            ] ++ parsedCounts combined
+            ] ++ rootField
+              ++ parsedCounts combined
               ++ (if null failures then []
                   else ["test_failures" .= testFailuresSummary failures])
               ++ (if null diags then []
@@ -202,12 +207,14 @@ callBenchRun mcwd params = do
       let success  = soExitCode so == 0
           combined = soStdout so <> "\n" <> soStderr so
           diags    = parseGhcDiagnostics (soStderr so)
+          rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
           result   = object $
             [ "success" .= success
             , "suite"   .= suite
             , "output"  .= soStdout so
             , "stderr"  .= soStderr so
-            ] ++ parsedCounts combined
+            ] ++ rootField
+              ++ parsedCounts combined
               ++ (if null diags then []
                   else ["diagnostics" .= diagnosticsSummary diags])
       pure $ if success
@@ -263,6 +270,12 @@ parseHspecCounts l =
   let ws = T.words l
       nums = extractNums ws
   in case nums of
+    (examples:failures:pending:_) ->
+      [ "total"    .= examples
+      , "failures" .= failures
+      , "pending"  .= pending
+      , "passed"   .= (examples - failures - pending)
+      ]
     (examples:failures:_) ->
       [ "total"    .= examples
       , "failures" .= failures
@@ -283,9 +296,4 @@ parseTastyCounts l =
     _ -> []
 
 extractNums :: [Text] -> [Int]
-extractNums = foldr (\w acc -> case readMaybeInt w of Just n -> n : acc; Nothing -> acc) []
-
-readMaybeInt :: Text -> Maybe Int
-readMaybeInt t = case reads (T.unpack t) of
-  [(n, "")] -> Just n
-  _         -> Nothing
+extractNums = foldr (\w acc -> case readInt w of Just n -> n : acc; Nothing -> acc) []

@@ -80,6 +80,8 @@ stackLsDepsTreeDef = ToolDef "stack_ls_dependencies_tree"
     , ("external", boolProp "Include only external dependencies (--external).")
     , ("license", boolProp "Print license instead of version (--license).")
     , ("prune", strProp "Comma-separated packages to prune.")
+    , ("test", boolProp "Consider test dependencies (--test).")
+    , ("bench", boolProp "Consider benchmark dependencies (--bench).")
     ] []
 
 stackLsSnapshotsDef :: ToolDef

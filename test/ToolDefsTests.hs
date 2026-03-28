@@ -30,8 +30,8 @@ import StackMCP.Tools.Edit qualified as Edit
 
 tests :: TestTree
 tests = testGroup "ToolDefs"
-  [ testCase "total tool count is 63" $
-      length allTools @?= 63
+  [ testCase "total tool count is 73" $
+      length allTools @?= 73
 
   , testCase "all tool names are unique" $ do
       let names = map toolName allTools
@@ -88,14 +88,23 @@ tests = testGroup "ToolDefs"
         , "project_add_dependency", "project_remove_dependency"
         , "project_add_module", "project_expose_module"
         , "project_rename_module", "project_list_modules"
+        -- Build (newer)
+        , "stack_hpc_report", "stack_typecheck"
+        -- Edit (newer)
+        , "project_remove_module"
+        , "project_add_extra_dep", "project_remove_extra_dep"
+        , "project_set_ghc_options"
+        , "project_add_default_extension", "project_remove_default_extension"
+        , "project_add_component", "project_resolve_module"
         ]
 
-  , testCase "known tools list is exhaustive (covers all 63)" $ do
+  , testCase "known tools list is exhaustive (covers all 73)" $ do
       let known = sort
             [ "set_repo", "get_repo"
             , "stack_build", "stack_test", "stack_bench"
             , "stack_run", "stack_clean", "stack_purge"
             , "stack_haddock", "stack_install"
+            , "stack_hpc_report", "stack_typecheck"
             , "stack_new", "stack_init", "stack_setup"
             , "stack_templates"
             , "stack_config_set", "stack_config_env", "stack_config_build_files"
@@ -119,6 +128,11 @@ tests = testGroup "ToolDefs"
             , "project_add_dependency", "project_remove_dependency"
             , "project_add_module", "project_expose_module"
             , "project_rename_module", "project_list_modules"
+            , "project_remove_module"
+            , "project_add_extra_dep", "project_remove_extra_dep"
+            , "project_set_ghc_options"
+            , "project_add_default_extension", "project_remove_default_extension"
+            , "project_add_component", "project_resolve_module"
             ] :: [Text]
           actual = sort (map toolName allTools)
       assertEqual "known list matches allTools" actual known

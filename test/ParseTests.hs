@@ -11,11 +11,14 @@ import Data.Text (Text)
 import Data.Text qualified as T
 
 import StackMCP.Tools.Parse
+import StackMCP.Tools.Testing (parsedCounts, parseHspecCounts, parseTastyCounts)
 
 tests :: TestTree
 tests = testGroup "Parse"
   [ ghcDiagnosticTests
   , testFailureTests
+  , depErrorTests
+  , countParsingTests
   ]
 
 ------------------------------------------------------------------------
@@ -247,6 +250,113 @@ testFailureTests = testGroup "Test Failures"
             ]
           failures = parseTestFailures input
       length failures @?= 0
+  ]
+
+------------------------------------------------------------------------
+-- Dependency Error Parsing
+------------------------------------------------------------------------
+
+depErrorTests :: TestTree
+depErrorTests = testGroup "Dependency Errors"
+  [ testCase "In the dependencies for" $ do
+      let input = "In the dependencies for my-pkg-0.1.0.0: aeson needed, but the stack configuration has no specified version"
+          errs = parseDepErrors input
+      length errs @?= 1
+      depPackage (head errs) @?= "aeson"
+
+  , testCase "dash-prefixed from stack configuration" $ do
+      let input = "- aeson-2.1.0.0 from stack configuration does not match >=2.2 && <2.3"
+          errs = parseDepErrors input
+      length errs @?= 1
+      depPackage (head errs) @?= "aeson-2.1.0.0"
+
+  , testCase "dash-prefixed not found" $ do
+      let input = "- blaze-html-0.9.1.2 not found in package index"
+          errs = parseDepErrors input
+      length errs @?= 1
+      depPackage (head errs) @?= "blaze-html-0.9.1.2"
+
+  , testCase "must match (cabal solver)" $ do
+      let input = "base must match >=4.14 && <5, but installed version is 4.13.0.0"
+          errs = parseDepErrors input
+      length errs @?= 1
+      depPackage (head errs) @?= "base"
+
+  , testCase "multiple dep errors" $ do
+      let input = T.unlines
+            [ "In the dependencies for foo-0.1.0.0: aeson needed, but the stack configuration has no specified version"
+            , "- lens-5.0 from stack configuration does not match >=5.1"
+            , "text must match >=2.0, but installed version is 1.2.5.0"
+            ]
+          errs = parseDepErrors input
+      length errs @?= 3
+
+  , testCase "no dep errors in normal output" $ do
+      let input = T.unlines
+            [ "Preprocessing library for pkg-0.1.0.0..."
+            , "Building library for pkg-0.1.0.0..."
+            ]
+          errs = parseDepErrors input
+      length errs @?= 0
+
+  , testCase "empty input" $ do
+      let errs = parseDepErrors ""
+      length errs @?= 0
+
+  , testCase "depErrorsSummary structure" $ do
+      let input = "In the dependencies for pkg: aeson needed, but no version\n- lens-5.0 from stack configuration does not match >=5.1"
+          errs = parseDepErrors input
+          summary = depErrorsSummary errs
+      case summary of
+        Object o -> do
+          lookupKey "dependency_error_count" o @?= Just (Number 2)
+        _ -> assertFailure "summary should be an Object"
+  ]
+
+------------------------------------------------------------------------
+-- Count Parsing (Testing.hs helpers)
+------------------------------------------------------------------------
+
+countParsingTests :: TestTree
+countParsingTests = testGroup "Count Parsing"
+  [ testCase "hspec: examples + failures" $ do
+      let counts = parseHspecCounts "47 examples, 2 failures"
+      lookup "total" counts @?= Just (Number 47)
+      lookup "failures" counts @?= Just (Number 2)
+      lookup "passed" counts @?= Just (Number 45)
+
+  , testCase "hspec: examples + failures + pending" $ do
+      let counts = parseHspecCounts "10 examples, 1 failure, 3 pending"
+      lookup "total" counts @?= Just (Number 10)
+      lookup "failures" counts @?= Just (Number 1)
+      lookup "pending" counts @?= Just (Number 3)
+      lookup "passed" counts @?= Just (Number 6)
+
+  , testCase "hspec: no numbers" $ do
+      let counts = parseHspecCounts "no results here"
+      counts @?= []
+
+  , testCase "tasty: passed out of total" $ do
+      let counts = parseTastyCounts "3 out of 5 tests passed"
+      lookup "total" counts @?= Just (Number 5)
+      lookup "passed" counts @?= Just (Number 3)
+      lookup "failures" counts @?= Just (Number 2)
+
+  , testCase "tasty: no numbers" $ do
+      let counts = parseTastyCounts "all good"
+      counts @?= []
+
+  , testCase "parsedCounts picks hspec" $ do
+      let counts = parsedCounts "47 examples, 0 failures"
+      lookup "total" counts @?= Just (Number 47)
+
+  , testCase "parsedCounts picks tasty" $ do
+      let counts = parsedCounts "5 out of 5 tests passed"
+      lookup "total" counts @?= Just (Number 5)
+
+  , testCase "parsedCounts: no match" $ do
+      let counts = parsedCounts "Build succeeded."
+      counts @?= []
   ]
 
 ------------------------------------------------------------------------

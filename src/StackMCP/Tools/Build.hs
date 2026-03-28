@@ -7,7 +7,7 @@ module StackMCP.Tools.Build
 
 import Data.Text qualified as T
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary)
+import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary, parseDepErrors)
 
 tools :: [ToolDef]
 tools =
@@ -20,6 +20,7 @@ tools =
   , stackCleanDef
   , stackPurgeDef
   , stackHpcReportDef
+  , stackTypecheckDef
   ]
 
 dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
@@ -33,6 +34,7 @@ dispatch mcwd name params = case name of
   "stack_clean"   -> Just $ callStackClean mcwd params
   "stack_purge"      -> Just $ callStackPurge mcwd
   "stack_hpc_report" -> Just $ callStackHpcReport mcwd params
+  "stack_typecheck"  -> Just $ callStackTypecheck mcwd params
   _                  -> Nothing
 
 ------------------------------------------------------------------------
@@ -46,7 +48,8 @@ stackBuildDef = ToolDef "stack_build"
     [ ("targets", strProp "Space-separated build targets (e.g. package:lib, package:exe:name).")
     , ("fast", boolProp "Disable optimizations for faster compile (--fast).")
     , ("pedantic", boolProp "Enable -Wall -Werror (--pedantic).")
-    , ("file_watch", boolProp "Watch for file changes and rebuild (--file-watch).")
+    , ("no_link", boolProp "Type-check only, skip code generation (-fno-code). Prefer stack_typecheck for the fix loop (auto-adds --fast).")
+    , ("file_watch", boolProp "Watch for file changes and rebuild (--file-watch). NOTE: long-running — use task_exec for background watch mode.")
     , ("ghc_options", strProp "Additional GHC options (e.g. \"-O2 -fprof-auto\").")
     , ("flags", strProp "Additional raw flags to pass to stack build.")
     ] []
@@ -114,6 +117,15 @@ stackPurgeDef = ToolDef "stack_purge"
   \More aggressive than stack_clean — removes everything including snapshots." $
   mkSchema [] []
 
+stackTypecheckDef :: ToolDef
+stackTypecheckDef = ToolDef "stack_typecheck"
+  "Fast typecheck: build with --fast -fno-code. Skips optimizations and code generation \
+  \for the fastest possible feedback on type errors. Ideal for the build-fix loop." $
+  mkSchema
+    [ ("targets", strProp "Space-separated build targets.")
+    , ("ghc_options", strProp "Additional GHC options.")
+    ] []
+
 stackHpcReportDef :: ToolDef
 stackHpcReportDef = ToolDef "stack_hpc_report"
   "Generate a unified HPC code coverage report from .tix files produced by a previous --coverage test run. \
@@ -130,29 +142,34 @@ stackHpcReportDef = ToolDef "stack_hpc_report"
 ------------------------------------------------------------------------
 
 -- | Parse build output into structured JSON with diagnostics.
+--   Includes project_root so agents can resolve relative diagnostic paths.
 structuredBuild :: Maybe FilePath -> [Text] -> IO ToolResult
 structuredBuild mcwd args = do
   so <- runStackRaw mcwd args
   let diags = parseGhcDiagnostics (soStderr so)
+      depErrs = parseDepErrors (soStderr so)
+      rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object
+    0 -> mkToolResultJSON $ object $
            [ "success"     .= True
            , "output"      .= soStdout so
            , "diagnostics" .= diagnosticsSummary diags
-           ]
-    _ -> mkCommandErrorWithDiags args so diags
+           ] ++ rootField
+    _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
 
 callStackBuild :: Maybe FilePath -> Value -> IO ToolResult
 callStackBuild mcwd params = do
   let targets = T.words (getParamText "targets" params)
       fast    = getParamBool "fast" params
       ped     = getParamBool "pedantic" params
+      noLink  = getParamBool "no_link" params
       watch   = getParamBool "file_watch" params
       ghcOpts = getParamText "ghc_options" params
       flags   = T.words (getParamText "flags" params)
       args = ["build"] ++ targets
           ++ ["--fast" | fast]
           ++ ["--pedantic" | ped]
+          ++ ["--ghc-options" | noLink] ++ ["-fno-code" | noLink]
           ++ ["--file-watch" | watch]
           ++ ["--ghc-options" | not (T.null ghcOpts)] ++ [ghcOpts | not (T.null ghcOpts)]
           ++ flags
@@ -208,13 +225,15 @@ callStackRun mcwd params = do
           ++ (if null rArgs then [] else "--" : rArgs)
   so <- runStackRaw mcwd args
   let diags = parseGhcDiagnostics (soStderr so)
+      depErrs = parseDepErrors (soStderr so)
+  let rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object
+    0 -> mkToolResultJSON $ object $
            [ "success"     .= True
            , "output"      .= soStdout so
            , "diagnostics" .= diagnosticsSummary diags
-           ]
-    _ -> mkCommandErrorWithDiags args so diags
+           ] ++ rootField
+    _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
 
 callStackClean :: Maybe FilePath -> Value -> IO ToolResult
 callStackClean mcwd params = do
@@ -231,6 +250,16 @@ callStackPurge mcwd = do
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
     _ -> mkCommandError ["purge"] so
+
+callStackTypecheck :: Maybe FilePath -> Value -> IO ToolResult
+callStackTypecheck mcwd params = do
+  let targets = T.words (getParamText "targets" params)
+      ghcOpts = getParamText "ghc_options" params
+      args = ["build"] ++ targets
+          ++ ["--fast"]
+          ++ ["--ghc-options", "-fno-code"]
+          ++ ["--ghc-options" | not (T.null ghcOpts)] ++ [ghcOpts | not (T.null ghcOpts)]
+  structuredBuild mcwd args
 
 callStackHpcReport :: Maybe FilePath -> Value -> IO ToolResult
 callStackHpcReport mcwd params = do

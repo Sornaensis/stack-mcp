@@ -4,9 +4,11 @@ module Main (main) where
 
 import Data.Aeson
 import Data.Aeson.Key (fromText)
+import Data.Aeson.KeyMap qualified as KM
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import System.Directory (doesDirectoryExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -49,6 +51,16 @@ emptyParams = object []
 -- | Dispatch a tool call through the full dispatcher.
 call :: IORef (Maybe FilePath) -> TaskManager -> Text -> Value -> IO ToolResult
 call cwdRef tm name ps = Tools.callTool cwdRef tm name ps
+
+-- | Extract a text field from a JSON-encoded tool result.
+--   Falls back to "unknown" if the field or JSON is missing.
+extractField :: Text -> Text -> Text
+extractField key txt =
+  case decodeStrict (TE.encodeUtf8 txt) of
+    Just (Object o) -> case KM.lookup (fromText key) o of
+      Just (String v) -> v
+      _               -> "unknown"
+    _ -> "unknown"
 
 ------------------------------------------------------------------------
 -- Main
@@ -185,16 +197,17 @@ happyPathTests = testCaseSteps "happy path" $ \step ->
     assertSuccess "task_list" r19
 
     step "task_ghci_eval"
-    -- Give GHCi a moment to start, then evaluate
+    -- Extract the task_id from the task_ghci response
+    let tid = extractField "task_id" (resultText r18)
     r20 <- call cwdRef tm "task_ghci_eval"
-             (params [("task_id", String "ghci-1"), ("expression", String "2 + 2")])
-    -- May succeed or fail depending on GHCi startup timing; no crash = pass
-    let _ = r20
+             (params [("task_id", String tid), ("expression", String "2 + 2")])
+    -- GHCi eval may fail due to startup timing, but should not crash
+    assertBool "task_ghci_eval returns response" $ T.length (resultText r20) > 0
 
     step "task_kill"
     r21 <- call cwdRef tm "task_kill"
-             (params [("task_id", String "ghci-1")])
-    let _ = r21
+             (params [("task_id", String tid)])
+    assertBool "task_kill returns response" $ T.length (resultText r21) > 0
 
     step "task_list (after kill)"
     r22 <- call cwdRef tm "task_list" emptyParams
@@ -430,6 +443,108 @@ editToolsTests = testCaseSteps "edit tools" $ \step ->
     step "verify empty dirs were cleaned"
     deepExists <- doesDirectoryExist (projDir </> "src" </> "Deep")
     assertBool "Deep/ directory should be removed after rename" (not deepExists)
+
+    -- == Extra Deps ==
+    step "project_add_extra_dep (acme-missiles-0.3)"
+    rEd1 <- call cwdRef tm "project_add_extra_dep"
+              (params [("package", String "acme-missiles-0.3")])
+    assertSuccess "add extra dep" rEd1
+    assertBool "reports added" $ T.isInfixOf "added" (T.toLower (resultText rEd1))
+
+    step "project_add_extra_dep (duplicate)"
+    rEd2 <- call cwdRef tm "project_add_extra_dep"
+              (params [("package", String "acme-missiles-0.3")])
+    assertSuccess "add extra dep dup" rEd2
+    assertBool "reports already present" $ T.isInfixOf "already" (T.toLower (resultText rEd2))
+
+    step "project_remove_extra_dep (acme-missiles)"
+    rEd3 <- call cwdRef tm "project_remove_extra_dep"
+              (params [("package", String "acme-missiles")])
+    assertSuccess "remove extra dep" rEd3
+    assertBool "reports removed" $ T.isInfixOf "removed" (T.toLower (resultText rEd3))
+
+    step "project_remove_extra_dep (nonexistent)"
+    rEd4 <- call cwdRef tm "project_remove_extra_dep"
+              (params [("package", String "doesnotexist999")])
+    assertSuccess "remove nonexistent extra dep" rEd4
+    assertBool "reports not found" $
+      T.isInfixOf "not found" (T.toLower (resultText rEd4)) ||
+      T.isInfixOf "no extra-deps" (T.toLower (resultText rEd4))
+
+    -- == GHC Options ==
+    step "project_set_ghc_options (-Wall)"
+    rGo1 <- call cwdRef tm "project_set_ghc_options"
+              (params [("options", String "-Wall -Wextra")])
+    assertSuccess "set ghc-options" rGo1
+
+    step "project_set_ghc_options (clear)"
+    rGo2 <- call cwdRef tm "project_set_ghc_options"
+              (params [("options", String "")])
+    assertSuccess "clear ghc-options" rGo2
+
+    -- == Default Extensions ==
+    step "project_add_default_extension (LambdaCase)"
+    rDe1 <- call cwdRef tm "project_add_default_extension"
+              (params [("extension", String "LambdaCase")])
+    assertSuccess "add default ext" rDe1
+
+    step "project_add_default_extension (duplicate)"
+    rDe2 <- call cwdRef tm "project_add_default_extension"
+              (params [("extension", String "LambdaCase")])
+    assertSuccess "add default ext dup" rDe2
+    assertBool "reports already present" $ T.isInfixOf "already" (T.toLower (resultText rDe2))
+
+    step "project_remove_default_extension (LambdaCase)"
+    rDe3 <- call cwdRef tm "project_remove_default_extension"
+              (params [("extension", String "LambdaCase")])
+    assertSuccess "remove default ext" rDe3
+
+    step "project_remove_default_extension (nonexistent)"
+    rDe4 <- call cwdRef tm "project_remove_default_extension"
+              (params [("extension", String "NoSuchExtension")])
+    assertSuccess "remove nonexistent ext" rDe4
+    assertBool "reports not found" $
+      T.isInfixOf "not found" (T.toLower (resultText rDe4)) ||
+      T.isInfixOf "no default-extensions" (T.toLower (resultText rDe4))
+
+    -- == Add Component ==
+    step "project_add_component (test-suite)"
+    rCo1 <- call cwdRef tm "project_add_component"
+              (params [("name", String "editapp-test"), ("type", String "test-suite")])
+    assertSuccess "add component" rCo1
+    assertBool "reports created" $
+      T.isInfixOf "created" (T.toLower (resultText rCo1)) ||
+      T.isInfixOf "success" (T.toLower (resultText rCo1))
+
+    -- Verify the test source dir exists
+    testDirExists <- doesDirectoryExist (projDir </> "test")
+    assertBool "test/ directory created" testDirExists
+
+    -- == Resolve Module ==
+    step "project_resolve_module (Flat)"
+    rRm1 <- call cwdRef tm "project_resolve_module"
+              (params [("module_name", String "Flat")])
+    assertSuccess "resolve module" rRm1
+    assertBool "resolves to file path" $
+      T.isInfixOf "Flat.hs" (resultText rRm1)
+
+    step "project_resolve_module (nonexistent)"
+    rRm2 <- call cwdRef tm "project_resolve_module"
+              (params [("module_name", String "Does.Not.Exist")])
+    assertIsError "resolve nonexistent" rRm2
+    assertBool "reports not found" $
+      T.isInfixOf "not found" (T.toLower (resultText rRm2)) ||
+      T.isInfixOf "not_found" (T.toLower (resultText rRm2))
+
+    -- == Remove Module ==
+    step "project_remove_module (Flat)"
+    rDel1 <- call cwdRef tm "project_remove_module"
+               (params [("module_name", String "Flat")])
+    assertSuccess "remove module" rDel1
+    assertBool "reports deleted" $
+      T.isInfixOf "deleted" (T.toLower (resultText rDel1)) ||
+      T.isInfixOf "removed" (T.toLower (resultText rDel1)) ||
+      T.isInfixOf "success" (T.toLower (resultText rDel1))
 
     -- == Build to verify everything compiles ==
     step "stack_build (verify edit results compile)"

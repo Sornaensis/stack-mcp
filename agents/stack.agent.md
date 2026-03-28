@@ -30,12 +30,12 @@ Route tasks to the correct subagent based on the request:
 
 | Task Category | Subagent | When to Use |
 |---|---|---|
-| Building, testing, benchmarking | **@stack-build** | Compile, test, bench, haddock, install, run, clean, purge, HPC coverage reports |
+| Building, testing, benchmarking | **@stack-build** | Compile, typecheck, test, bench, haddock, install, run, clean, purge, HPC coverage reports |
 | Project scaffolding & config | **@stack-project** | New projects, init, setup GHC, templates, config |
 | Dependencies & packages | **@stack-deps** | List deps, snapshots, package index, dot graph, sdist, upload |
 | Running code & GHC | **@stack-exec** | exec, ghci info, ghc, eval, runghc, script, hoogle |
 | Background & interactive | **@stack-tasks** | Long-running processes, interactive GHCi sessions, task management |
-| Project editing & refactoring | **@stack-edit** | Add/remove dependencies and extra-deps, create/remove/expose/rename modules, ghc-options, default-extensions, add components |
+| Project editing & refactoring | **@stack-edit** | Add/remove dependencies and extra-deps, create/remove/expose/rename/resolve modules, ghc-options, default-extensions, add components |
 | Path/query/info | **@stack-info** | Inspect paths, query metadata, list tools, IDE targets, upgrade |
 
 ## Routing Rules
@@ -45,3 +45,7 @@ Route tasks to the correct subagent based on the request:
 3. **Cross-domain requests** → call subagents in sequence (e.g. build then test).
 4. **Ambiguous requests** → ask the user to clarify, or default to the most likely subagent.
 5. **Prefer delegation** — delegate domain-specific work to subagents. You may call `set_repo`, `get_repo`, `stack_pipeline`, and `stack_config_read` directly (these are orchestrator-level tools for repo setup, multi-step coordination, and pre-routing context).
+
+## Pipeline Notes
+
+`stack_pipeline` runs raw `stack` subcommands directly (e.g. `["build", "test --coverage"]`). It does NOT dispatch through the tool layer, so pipeline steps won't include `project_root` or `return_content` enrichment. Use pipeline for fast multi-step builds; use individual tools when you need structured responses.

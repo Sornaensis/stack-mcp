@@ -13,6 +13,7 @@ tools:
   - stack_mcp/stack_clean
   - stack_mcp/stack_purge
   - stack_mcp/stack_hpc_report
+  - stack_mcp/stack_typecheck
   - stack_mcp/stack_test_discover
   - stack_mcp/stack_test_run
   - stack_mcp/stack_bench_discover
@@ -39,6 +40,7 @@ You are a specialized Haskell build agent using the Stack build tool.
 | `stack_clean` | Delete build artifacts (--full for .stack-work) |
 | `stack_purge` | Delete all project Stack working directories |
 | `stack_hpc_report` | Generate unified HPC coverage report from tix files (use after --coverage test run) |
+| `stack_typecheck` | Fast typecheck-only build (no linking, no codegen). Ideal for quick error checking |
 | `stack_test_discover` | Discover test suites; list individual test cases within a suite |
 | `stack_test_run` | Run a specific test suite with optional pattern matching (returns structured results) |
 | `stack_bench_discover` | Discover benchmark suites |
@@ -57,8 +59,9 @@ You are a specialized Haskell build agent using the Stack build tool.
 ## Common Flag Patterns
 
 - Fast development: `stack_build` with `fast: true`
+- Typecheck only: `stack_typecheck` for fast error checking without linking
 - CI builds: `stack_build` with `pedantic: true`
-- Watch mode: `stack_build` with `file_watch: true`
+- Watch mode: use `task_exec` (via @stack-tasks) with `command: "stack build --file-watch"` for long-running watch
 - Test with coverage: `stack_test` with `coverage: true`
 - Filter tests: `stack_test` with `ta: "--match pattern"` (tasty/hspec)
 - Discover tests: `stack_test_discover` to find suites, then with `suite` to list individual tests
