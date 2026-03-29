@@ -84,12 +84,23 @@ runStackRaw mcwd args = do
           ("stack-mcp: command timed out after 5 minutes: stack "
            <> T.unwords args <> if T.null errStr then "" else "\n" <> errStr)
       Just ec -> do
-        -- Process exited, but child processes may still hold pipes open.
-        -- Close handles from our side to unblock the reader threads.
-        closeSilent hout
-        closeSilent herr
-        _ <- timeout pipeGraceUs (takeMVar outVar)
-        _ <- timeout pipeGraceUs (takeMVar errVar)
+        -- Process exited.  Let readers finish naturally first — they'll
+        -- get EOF once the last handle holder (possibly a child process)
+        -- closes its end.  Only force-close if they don't finish in time.
+        outDone <- timeout pipeGraceUs (takeMVar outVar)
+        errDone <- timeout pipeGraceUs (takeMVar errVar)
+        -- If either reader timed out, the pipe is held open by a child
+        -- process.  Close from our side to unblock, then wait briefly.
+        case outDone of
+          Nothing -> do closeSilent hout
+                        _ <- timeout pipeGraceUs (takeMVar outVar)
+                        pure ()
+          Just _  -> pure ()
+        case errDone of
+          Nothing -> do closeSilent herr
+                        _ <- timeout pipeGraceUs (takeMVar errVar)
+                        pure ()
+          Just _  -> pure ()
         outStr <- readIORef outRef
         errStr <- readIORef errRef
         let code = case ec of
