@@ -8,12 +8,12 @@ module StackMCP.Process
   ) where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
-import Control.Exception (SomeException, try, catch)
+import Control.Exception (SomeException, try)
 import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import System.IO (Handle, hClose, hSetBinaryMode, hWaitForInput)
+import System.IO (Handle, hClose, hWaitForInput)
 import System.Process
   (proc, createProcess, waitForProcess, terminateProcess,
    CreateProcess(..), StdStream(..))
