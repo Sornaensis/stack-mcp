@@ -2,6 +2,7 @@
 
 module StackMCP.Tools
   ( allTools
+  , toolPages
   , callTool
   ) where
 
@@ -22,20 +23,24 @@ import StackMCP.Tools.Pipeline qualified as Pipeline
 import StackMCP.Tools.Tasks qualified as Tasks
 import StackMCP.Tools.Edit qualified as Edit
 
+-- | Tools grouped by category for paginated listing.
+toolPages :: [(Text, [ToolDef])]
+toolPages =
+  [ ("repo",     Repo.tools)
+  , ("build",    Build.tools)
+  , ("project",  Project.tools)
+  , ("deps",     Deps.tools)
+  , ("exec",     Exec.tools)
+  , ("info",     Info.tools)
+  , ("testing",  Testing.tools)
+  , ("pipeline", Pipeline.tools)
+  , ("tasks",    Tasks.tools)
+  , ("edit",     Edit.tools)
+  ]
+
 -- | All tools from every submodule.
 allTools :: [ToolDef]
-allTools = concat
-  [ Repo.tools
-  , Build.tools
-  , Project.tools
-  , Deps.tools
-  , Exec.tools
-  , Info.tools
-  , Testing.tools
-  , Pipeline.tools
-  , Tasks.tools
-  , Edit.tools
-  ]
+allTools = concatMap snd toolPages
 
 -- | Dispatch a tool call by name. Tries each submodule's dispatch in order.
 callTool :: IORef (Maybe FilePath) -> TaskManager -> Text -> Value -> IO ToolResult

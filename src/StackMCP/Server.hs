@@ -20,7 +20,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import System.IO (hFlush, stdout, stdin, stderr, hPutStrLn, hSetBuffering, BufferMode(..))
 import StackMCP.Types
-import StackMCP.Tools (allTools, callTool)
+import StackMCP.Tools (toolPages, callTool)
 import StackMCP.Resources (listResources, readResource)
 import StackMCP.Prompts (allPrompts, getPrompt)
 import StackMCP.TaskManager (TaskManager, newTaskManager)
@@ -177,9 +177,28 @@ handleInitialize req = pure $ mkSuccess (rpcReqId req) $ object
 ------------------------------------------------------------------------
 
 handleToolsList :: JsonRpcRequest -> IO JsonRpcResponse
-handleToolsList req = pure $ mkSuccess (rpcReqId req) $ object
-  [ "tools" .= allTools
-  ]
+handleToolsList req = pure $ case getCursor req of
+  Nothing ->
+    -- No cursor: return first page
+    case toolPages of
+      [] -> mkSuccess (rpcReqId req) $ object [ "tools" .= ([] :: [Value]) ]
+      ((_, page):rest) -> mkSuccess (rpcReqId req) $ object $
+        [ "tools" .= page ] ++ nextCursorField rest
+  Just cur ->
+    case dropWhile (\(name, _) -> name /= cur) toolPages of
+      [] -> mkError (rpcReqId req) (-32602) ("Invalid cursor: " <> cur)
+      ((_, page):rest) -> mkSuccess (rpcReqId req) $ object $
+        [ "tools" .= page ] ++ nextCursorField rest
+  where
+    nextCursorField [] = []
+    nextCursorField ((nextName, _):_) = [ "nextCursor" .= nextName ]
+
+    getCursor :: JsonRpcRequest -> Maybe Text
+    getCursor r = case rpcReqParams r of
+      Just (Object params) -> case KM.lookup (fromText "cursor") params of
+        Just (String c) -> Just c
+        _               -> Nothing
+      _                    -> Nothing
 
 handleToolsCall :: IORef (Maybe FilePath) -> TaskManager -> JsonRpcRequest -> IO JsonRpcResponse
 handleToolsCall cwdRef tm req = do
