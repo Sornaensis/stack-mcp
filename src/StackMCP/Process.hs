@@ -13,7 +13,7 @@ import Data.IORef
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import System.IO (Handle, hClose)
+import System.IO (Handle, hClose, hSetBinaryMode, hWaitForInput)
 import System.Process
   (proc, createProcess, waitForProcess, terminateProcess,
    CreateProcess(..), StdStream(..))
@@ -23,10 +23,6 @@ import System.Timeout (timeout)
 -- | Default timeout for stack commands: 5 minutes (in microseconds).
 defaultTimeoutUs :: Int
 defaultTimeoutUs = 5 * 60 * 1000000
-
--- | Grace period after process exits for pipe readers to finish (10 seconds).
-pipeGraceUs :: Int
-pipeGraceUs = 10 * 1000000
 
 -- | Structured output from a stack command.
 data StackOutput = StackOutput
@@ -41,12 +37,12 @@ data StackOutput = StackOutput
 --   Times out after 5 minutes with exit code 124.
 --
 --   On Windows, child processes spawned by @stack@ can inherit pipe handles.
---   Even after @stack@ exits, those children may hold the handles open,
---   causing @hGetContents@ to block indefinitely.  To avoid this we:
---     1. Wait for the process in a separate thread (interruptible timeout).
---     2. After the process exits (or on timeout), close the pipe handles
---        from our side so the reader threads get an error/EOF.
---     3. Give readers a bounded grace period before returning.
+--   Even after @stack@ exits, those children may hold the handles open.
+--   Both @hGetContents@ and @hGetLine@ block while holding the Handle lock, so
+--   @hClose@ from another thread also blocks.  We avoid this by using
+--   @hWaitForInput@ with a short poll interval: the reader only calls
+--   @hGetLine@ when data is known to be available, and checks a stop flag
+--   between polls.  This ensures the reader exits promptly once signalled.
 runStackRaw :: Maybe FilePath -> [Text] -> IO StackOutput
 runStackRaw mcwd args = do
   let strArgs = map T.unpack ("--color=never" : args)
@@ -59,48 +55,36 @@ runStackRaw mcwd args = do
   result <- try $ do
     (Just hin, Just hout, Just herr, ph) <- createProcess cp
     hClose hin
-    -- Accumulate output incrementally so closing the handle doesn't lose data.
-    outRef <- newIORef T.empty
-    errRef <- newIORef T.empty
-    outVar <- newEmptyMVar
-    errVar <- newEmptyMVar
-    _ <- forkIO (readHandle hout outRef >>= putMVar outVar)
-    _ <- forkIO (readHandle herr errRef >>= putMVar errVar)
+    -- Accumulate output incrementally.
+    outRef  <- newIORef T.empty
+    errRef  <- newIORef T.empty
+    stopRef <- newIORef False
+    outVar  <- newEmptyMVar
+    errVar  <- newEmptyMVar
+    _ <- forkIO (readHandle hout outRef stopRef >>= putMVar outVar)
+    _ <- forkIO (readHandle herr errRef stopRef >>= putMVar errVar)
     -- Wait for the process in a separate thread so the timeout is always
-    -- interruptible.
+    -- interruptible (takeMVar can receive async exceptions).
     exitVar <- newEmptyMVar
     _ <- forkIO (waitForProcess ph >>= putMVar exitVar)
     mExit <- timeout defaultTimeoutUs (takeMVar exitVar)
+    -- Signal readers to stop, then collect results.
+    writeIORef stopRef True
     case mExit of
       Nothing -> do
         terminateProcess ph
-        closeSilent hout
-        closeSilent herr
-        _ <- timeout pipeGraceUs (takeMVar outVar)
-        _ <- timeout pipeGraceUs (takeMVar errVar)
+        -- Give readers up to 3s to notice the stop flag and finish.
+        _ <- timeout 3000000 (takeMVar outVar)
+        _ <- timeout 3000000 (takeMVar errVar)
         outStr <- readIORef outRef
         errStr <- readIORef errRef
         pure $ StackOutput 124 outStr
           ("stack-mcp: command timed out after 5 minutes: stack "
            <> T.unwords args <> if T.null errStr then "" else "\n" <> errStr)
       Just ec -> do
-        -- Process exited.  Let readers finish naturally first — they'll
-        -- get EOF once the last handle holder (possibly a child process)
-        -- closes its end.  Only force-close if they don't finish in time.
-        outDone <- timeout pipeGraceUs (takeMVar outVar)
-        errDone <- timeout pipeGraceUs (takeMVar errVar)
-        -- If either reader timed out, the pipe is held open by a child
-        -- process.  Close from our side to unblock, then wait briefly.
-        case outDone of
-          Nothing -> do closeSilent hout
-                        _ <- timeout pipeGraceUs (takeMVar outVar)
-                        pure ()
-          Just _  -> pure ()
-        case errDone of
-          Nothing -> do closeSilent herr
-                        _ <- timeout pipeGraceUs (takeMVar errVar)
-                        pure ()
-          Just _  -> pure ()
+        -- Give readers up to 3s to drain remaining data and notice the flag.
+        _ <- timeout 3000000 (takeMVar outVar)
+        _ <- timeout 3000000 (takeMVar errVar)
         outStr <- readIORef outRef
         errStr <- readIORef errRef
         let code = case ec of
@@ -112,18 +96,44 @@ runStackRaw mcwd args = do
       ("stack-mcp: failed to run stack: " <> T.pack (show err))
     Right so -> pure so
  where
-  -- Read a handle to Text line-by-line, accumulating into an IORef.
-  -- When the handle is closed from the outside the read throws, and we stop.
-  readHandle :: Handle -> IORef Text -> IO ()
-  readHandle h ref = go
+  -- | Read a handle using a non-blocking poll loop.
+  --   @hWaitForInput@ with a 500ms timeout avoids holding the Handle lock
+  --   for extended periods, so the reader can check the stop flag regularly
+  --   and exit promptly when signalled.
+  readHandle :: Handle -> IORef Text -> IORef Bool -> IO ()
+  readHandle h ref stopRef = go
     where
       go = do
-        r <- try (TIO.hGetLine h)
-        case (r :: Either SomeException Text) of
-          Left _    -> pure ()
-          Right ln  -> do
-            modifyIORef' ref (\acc -> if T.null acc then ln else acc <> "\n" <> ln)
-            go
+        stop <- readIORef stopRef
+        if stop
+          then drain  -- drain any remaining buffered data before exiting
+          else do
+            ready <- try (hWaitForInput h 500)
+            case (ready :: Either SomeException Bool) of
+              Left _      -> pure ()  -- handle closed or error
+              Right False -> go       -- no data yet, poll again
+              Right True  -> do
+                r <- try (TIO.hGetLine h)
+                case (r :: Either SomeException Text) of
+                  Left _   -> pure ()
+                  Right ln -> do
+                    appendLine ref ln
+                    go
 
-  closeSilent :: Handle -> IO ()
-  closeSilent h = hClose h `catch` (\(_ :: SomeException) -> pure ())
+      -- After stop is signalled, read whatever is immediately available.
+      drain = do
+        ready <- try (hWaitForInput h 0)
+        case (ready :: Either SomeException Bool) of
+          Left _      -> pure ()
+          Right False -> pure ()
+          Right True  -> do
+            r <- try (TIO.hGetLine h)
+            case (r :: Either SomeException Text) of
+              Left _   -> pure ()
+              Right ln -> do
+                appendLine ref ln
+                drain
+
+  appendLine :: IORef Text -> Text -> IO ()
+  appendLine ref ln =
+    modifyIORef' ref (\acc -> if T.null acc then ln else acc <> "\n" <> ln)
