@@ -59,7 +59,7 @@ debugBuildFailure params =
          <> "2. Suggest specific fixes\n"
          <> "3. If it's a dependency issue, suggest version constraints\n"
          <> "4. If it's a code issue, explain what needs to change\n\n"
-         <> "You can use the stack_build, stack_path, and stack_ls_dependencies tools to investigate further."
+         <> "Use the provided error output as the primary source. If one targeted tool call is absolutely necessary, make at most one of stack_build, stack_path, or stack_ls_dependencies, then answer. Do not keep investigating after that."
      ]
 
 addDependency :: Value -> [PromptMessage]

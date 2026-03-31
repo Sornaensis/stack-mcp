@@ -20,33 +20,45 @@ import System.FilePath ((</>), takeDirectory)
 import System.Info (os)
 import System.Process (readCreateProcessWithExitCode, proc, CreateProcess(..))
 
+data InstallOptions = InstallOptions
+  { ioTarget     :: String
+  , ioConfigOnly :: Bool
+  }
+
 main :: IO ()
 main = do
-  args <- getArgs
-  let target = case args of
-        (t:_) | t `elem` ["all", "claude", "copilot"] -> t
-        []    -> "all"
-        _     -> error "Usage: stack-mcp-install [all|claude|copilot]"
+  opts <- parseArgs =<< getArgs
+  let target = ioTarget opts
+      configOnly = ioConfigOnly opts
 
   putStrLn "=== stack-mcp installer ==="
 
-  -- Build the executable
-  putStrLn "\nBuilding stack-mcp..."
   projectDir <- getCurrentDirectory
-  (ec, _, serr) <- readCreateProcessWithExitCode
-    (proc "stack" ["build"]) { cwd = Just projectDir } ""
-  case ec of
-    ExitSuccess   -> pure ()
-    ExitFailure _ -> do
-      -- stack build can fail at the copy/register step even though
-      -- compilation succeeded (e.g. locked exe on Windows).
-      -- We check for the built exe below and only fail if it's missing.
-      putStrLn "  Warning: stack build exited with an error (copy step may have failed)"
-      putStrLn $ "  " ++ lastLine serr
 
-  -- Resolve the built executable path
-  exePath <- resolveExePath
-  putStrLn $ "stack-mcp installed at: " ++ exePath
+  exePath <- if configOnly
+    then do
+      putStrLn "\nSkipping build and binary install (--config-only)..."
+      path <- resolveInstalledExePath
+      putStrLn $ "Using existing stack-mcp at: " ++ path
+      pure path
+    else do
+      -- Build the executable
+      putStrLn "\nBuilding stack-mcp..."
+      (ec, _, serr) <- readCreateProcessWithExitCode
+        (proc "stack" ["build"]) { cwd = Just projectDir } ""
+      case ec of
+        ExitSuccess   -> pure ()
+        ExitFailure _ -> do
+          -- stack build can fail at the copy/register step even though
+          -- compilation succeeded (e.g. locked exe on Windows).
+          -- We check for the built exe below and only fail if it's missing.
+          putStrLn "  Warning: stack build exited with an error (copy step may have failed)"
+          putStrLn $ "  " ++ lastLine serr
+
+      -- Resolve the built executable path
+      path <- resolveExePath
+      putStrLn $ "stack-mcp installed at: " ++ path
+      pure path
 
   -- Install configs
   when (target == "all" || target == "claude") $ do
@@ -63,6 +75,20 @@ main = do
 
   putStrLn "\n=== Installation complete ==="
   putStrLn "Restart Claude Code / VS Code to pick up the new MCP server."
+
+parseArgs :: [String] -> IO InstallOptions
+parseArgs rawArgs =
+  case filter (/= "--config-only") rawArgs of
+    [] -> pure $ InstallOptions "all" configOnly
+    [target] | target `elem` ["all", "claude", "copilot"] ->
+      pure $ InstallOptions target configOnly
+    _ -> do
+      putStrLn "Usage: stack-mcp-install [all|claude|copilot] [--config-only]"
+      putStrLn "       --config-only reuses the existing installed executable, updates config files,"
+      putStrLn "       and still installs Copilot agent files when targeting Copilot."
+      exitFailure
+  where
+    configOnly = "--config-only" `elem` rawArgs
 
 ------------------------------------------------------------------------
 -- Executable resolution
@@ -96,7 +122,25 @@ resolveExePath = do
       putStrLn "ERROR: could not determine stack dist dir"
       exitFailure
   where
-    exeName = if isWindows then "stack-mcp.exe" else "stack-mcp"
+    exeName = installedExeName
+
+resolveInstalledExePath :: IO FilePath
+resolveInstalledExePath = do
+  destExe <- installedExePath
+  exists <- doesFileExist destExe
+  unless exists $ do
+    putStrLn $ "ERROR: --config-only requires an existing installed executable at " ++ destExe
+    putStrLn "       Run stack-mcp-install without --config-only first."
+    exitFailure
+  pure destExe
+
+installedExePath :: IO FilePath
+installedExePath = do
+  destDir <- installBinDir
+  pure $ destDir </> installedExeName
+
+installedExeName :: FilePath
+installedExeName = if isWindows then "stack-mcp.exe" else "stack-mcp"
 
 -- | Target install directory for the stack-mcp binary.
 -- Windows: %APPDATA%/stack-mcp/bin/

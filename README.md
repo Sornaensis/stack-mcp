@@ -17,4 +17,13 @@ stack run stack-mcp-install -- claude
 stack run stack-mcp-install -- copilot
 ```
 
+To update config using the existing installed executable, without rebuilding or recopying the binary:
+
+```
+stack run stack-mcp-install -- --config-only
+stack run stack-mcp-install -- copilot --config-only
+```
+
+When targeting Copilot, `--config-only` still installs the agent files. It only skips rebuilding and reinstalling the `stack-mcp` executable.
+
 Restart Claude Code / VS Code after installation to pick up the new MCP server.
