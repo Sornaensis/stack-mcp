@@ -82,7 +82,7 @@ callTestDiscover mcwd params = do
   if T.null suite
     then do
       -- List all test suites
-      so <- runStackRaw mcwd ["ide", "targets", "--stdout", "--tests"]
+      so <- runStackBuild mcwd ["ide", "targets", "--stdout", "--tests"]
       case soExitCode so of
         0 -> do
           let targets = filter (not . T.null) $ T.lines (soStdout so)
@@ -99,7 +99,7 @@ callTestDiscover mcwd params = do
             "hspec" -> ["--dry-run", "--format", "checks"]
             _       -> ["--list-tests"]  -- try tasty-style first
           taFlags = tagEach "--ta" listArgs
-      so <- runStackRaw mcwd $ ["test", suite] ++ taFlags
+      so <- runStackBuild mcwd $ ["test", suite] ++ taFlags
       case soExitCode so of
         0 -> do
           let rawLines = filter (not . T.null) $ T.lines (soStdout so)
@@ -114,7 +114,7 @@ callTestDiscover mcwd params = do
           -- Only attempt hspec fallback when framework is "auto" or unset
           if framework == "" || framework == "auto"
             then do
-              so2 <- runStackRaw mcwd
+              so2 <- runStackBuild mcwd
                 ["test", suite, "--ta", "--dry-run", "--ta", "--format", "--ta", "checks"]
               case soExitCode so2 of
                 0 -> do
@@ -155,7 +155,7 @@ callTestRun mcwd params = do
               ++ ["--coverage" | coverage]
               ++ tagEach "--ta" taWords
               ++ flags
-      so <- runStackRaw mcwd args
+      so <- runStackBuild mcwd args
       let success    = soExitCode so == 0
           combined   = soStdout so <> "\n" <> soStderr so
           failures   = parseTestFailures combined
@@ -178,7 +178,7 @@ callTestRun mcwd params = do
 
 callBenchDiscover :: Maybe FilePath -> Value -> IO ToolResult
 callBenchDiscover mcwd _params = do
-  so <- runStackRaw mcwd ["ide", "targets", "--stdout", "--benchmarks"]
+  so <- runStackBuild mcwd ["ide", "targets", "--stdout", "--benchmarks"]
   case soExitCode so of
     0 -> do
       let targets = filter (not . T.null) $ T.lines (soStdout so)
@@ -203,7 +203,7 @@ callBenchRun mcwd params = do
           args = ["bench", suite]
               ++ tagEach "--ba" baWords
               ++ flags
-      so <- runStackRaw mcwd args
+      so <- runStackBuild mcwd args
       let success  = soExitCode so == 0
           combined = soStdout so <> "\n" <> soStderr so
           diags    = parseGhcDiagnostics (soStderr so)

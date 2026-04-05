@@ -177,7 +177,7 @@ callStackLsDeps mcwd params = do
           ++ ["--license" | license]
           ++ ["--separator" | not (T.null sep)] ++ [sep | not (T.null sep)]
           ++ concatMap (\f -> ["--filter", f]) (splitComma filt)
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   case soExitCode so of
     0 -> do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
@@ -196,7 +196,7 @@ callStackLsDeps mcwd params = do
 callStackLsDepsJson :: Maybe FilePath -> Value -> IO ToolResult
 callStackLsDepsJson mcwd params = do
   let args = ["ls", "dependencies", "json"] ++ depsCommon params
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   case soExitCode so of
     0 -> case eitherDecodeStrict (TE.encodeUtf8 (soStdout so)) of
            Right v  -> pure $ mkToolResultJSON v
@@ -213,7 +213,7 @@ callStackLsDepsTree mcwd params = do
       args = ["ls", "dependencies", "tree"]
           ++ depsCommon params
           ++ ["--license" | license]
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["tree" .= soStdout so]
     _ -> mkCommandError args so
@@ -226,14 +226,14 @@ callStackLsSnapshots mcwd params = do
           ++ [source | not (T.null source)]
           ++ ["--lts" | ty == "lts"]
           ++ ["--nightly" | ty == "nightly"]
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so
 
 callStackLsGlobals :: Maybe FilePath -> IO ToolResult
 callStackLsGlobals mcwd = do
-  so <- runStackRaw mcwd ["ls", "globals"]
+  so <- runStackBuild mcwd ["ls", "globals"]
   case soExitCode so of
     0 -> do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
@@ -253,7 +253,7 @@ callStackUnpack mcwd params = do
     then pure $ mkToolError "package parameter is required"
     else do
       let args = ["unpack", pkg]
-      so <- runStackRaw mcwd args
+      so <- runStackBuild mcwd args
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object
           ["success" .= True, "package" .= pkg, "output" .= soStdout so]
@@ -262,7 +262,7 @@ callStackUnpack mcwd params = do
 callStackUpdate :: Maybe FilePath -> IO ToolResult
 callStackUpdate mcwd = do
   let args = ["update"]
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
     _ -> mkCommandError args so
@@ -274,7 +274,7 @@ callStackList mcwd params = do
       args = ["list"]
           ++ [pkg | not (T.null pkg)]
           ++ ["--snapshot" | not (T.null snapshot)] ++ [snapshot | not (T.null snapshot)]
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   case soExitCode so of
     0 -> do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
@@ -299,7 +299,7 @@ callStackDot mcwd params = do
           ++ depthArg
           ++ ["--prune" | not (T.null prune)] ++ [prune | not (T.null prune)]
           ++ flags
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["dot" .= soStdout so, "format" .= ("graphviz" :: Text)]
     _ -> mkCommandError args so
@@ -309,7 +309,7 @@ callStackSdist mcwd params = do
   let targets = T.words (getParamText "targets" params)
       flags   = T.words (getParamText "flags" params)
       args    = ["sdist"] ++ targets ++ flags
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
     _ -> mkCommandError args so
@@ -324,7 +324,7 @@ callStackUpload mcwd params = do
           ++ ["--documentation" | docs]
           ++ ["--candidate" | cand]
           ++ flags
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
     _ -> mkCommandError args so

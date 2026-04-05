@@ -145,7 +145,7 @@ stackHpcReportDef = ToolDef "stack_hpc_report"
 --   Includes project_root so agents can resolve relative diagnostic paths.
 structuredBuild :: Maybe FilePath -> [Text] -> IO ToolResult
 structuredBuild mcwd args = do
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   let diags = parseGhcDiagnostics (soStderr so)
       depErrs = parseDepErrors (soStderr so)
       rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
@@ -239,14 +239,14 @@ callStackClean :: Maybe FilePath -> Value -> IO ToolResult
 callStackClean mcwd params = do
   let full = getParamBool "full" params
       args = ["clean"] ++ ["--full" | full]
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
     _ -> mkCommandError args so
 
 callStackPurge :: Maybe FilePath -> IO ToolResult
 callStackPurge mcwd = do
-  so <- runStackRaw mcwd ["purge"]
+  so <- runStackBuild mcwd ["purge"]
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
     _ -> mkCommandError ["purge"] so
@@ -272,7 +272,7 @@ callStackHpcReport mcwd params = do
           ++ ["--all" | allPkgs]
           ++ ["--destdir" | not (T.null destdir)] ++ [destdir | not (T.null destdir)]
           ++ ["--open" | doOpen]
-  so <- runStackRaw mcwd args
+  so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object
            [ "success" .= True

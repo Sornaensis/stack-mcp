@@ -72,7 +72,7 @@ callPipeline cwdRef params = do
     runPipeline _ [] _ acc = pure (reverse acc)
     runPipeline mcwd' (step:rest) n acc = do
       let args = T.words step
-      so <- runStackRaw mcwd' args
+      so <- runStackBuild mcwd' args
       let success = soExitCode so == 0
           diags   = parseGhcDiagnostics (soStderr so)
           depErrs = parseDepErrors (soStderr so)

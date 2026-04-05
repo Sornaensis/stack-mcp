@@ -30,6 +30,7 @@ module StackMCP.Tools.Common
   , mkToolErrorJSON
   , mkStructuredError
   , runStackRaw
+  , runStackBuild
   , StackOutput(..)
   ) where
 
@@ -40,7 +41,7 @@ import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Text qualified as T
 import StackMCP.Types (ToolDef(..), ToolResult, mkToolResult, mkToolResultJSON, mkToolError, mkToolErrorJSON, mkStructuredError)
-import StackMCP.Process (runStackRaw, StackOutput(..))
+import StackMCP.Process (runStackRaw, runStackBuild, StackOutput(..))
 import StackMCP.Tools.Parse (GhcDiagnostic, parseGhcDiagnostics, diagnosticsSummary, DepError, parseDepErrors, depErrorsSummary)
 
 ------------------------------------------------------------------------
