@@ -53,6 +53,7 @@ stackBuildDef = ToolDef "stack_build"
     , ("ghc_options", strProp "Additional GHC options (e.g. \"-O2 -fprof-auto\").")
     , ("flags", strProp "Additional raw flags to pass to stack build.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false). Only errors are returned otherwise.")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
 
 stackTestDef :: ToolDef
@@ -65,6 +66,7 @@ stackTestDef = ToolDef "stack_test"
     , ("ta", strProp "Test arguments passed via --ta (e.g. \"--match pattern\").")
     , ("flags", strProp "Additional raw flags.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
 
 stackBenchDef :: ToolDef
@@ -76,6 +78,7 @@ stackBenchDef = ToolDef "stack_bench"
     , ("ba", strProp "Benchmark arguments passed via --ba.")
     , ("flags", strProp "Additional raw flags.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
 
 stackHaddockDef :: ToolDef
@@ -87,6 +90,7 @@ stackHaddockDef = ToolDef "stack_haddock"
     , ("no_deps", boolProp "Skip documentation for dependencies (--no-haddock-deps).")
     , ("flags", strProp "Additional raw flags.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
 
 stackInstallDef :: ToolDef
@@ -96,6 +100,7 @@ stackInstallDef = ToolDef "stack_install"
     [ ("targets", strProp "Space-separated targets to install.")
     , ("flags", strProp "Additional raw flags.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
 
 stackRunDef :: ToolDef
@@ -107,6 +112,7 @@ stackRunDef = ToolDef "stack_run"
     , ("args", strProp "Space-separated arguments passed to the executable.")
     , ("flags", strProp "Additional raw flags for stack run.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
 
 stackCleanDef :: ToolDef
@@ -131,6 +137,7 @@ stackTypecheckDef = ToolDef "stack_typecheck"
     [ ("targets", strProp "Space-separated build targets.")
     , ("ghc_options", strProp "Additional GHC options.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
 
 stackHpcReportDef :: ToolDef
@@ -151,8 +158,9 @@ stackHpcReportDef = ToolDef "stack_hpc_report"
 -- | Parse build output into structured JSON with diagnostics.
 --   Includes project_root so agents can resolve relative diagnostic paths.
 --   Warnings are only included when @includeWarnings@ is True.
-structuredBuild :: Maybe FilePath -> Bool -> [Text] -> IO ToolResult
-structuredBuild mcwd includeWarnings args = do
+--   Raw output is only included when @includeOutput@ is True.
+structuredBuild :: Maybe FilePath -> Bool -> Bool -> [Text] -> IO ToolResult
+structuredBuild mcwd includeWarnings includeOutput args = do
   so <- runStackBuild mcwd args
   let diags = parseGhcDiagnostics (soStderr so)
       depErrs = parseDepErrors (soStderr so)
@@ -162,8 +170,9 @@ structuredBuild mcwd includeWarnings args = do
     0 -> mkToolResultJSON $ object $
            [ "success" .= True
            ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+             ++ ["output" .= soStdout so | includeOutput]
              ++ rootField
-    _ -> mkCommandErrorFiltered includeWarnings args so diags depErrs mcwd
+    _ -> mkCommandErrorFiltered includeWarnings includeOutput args so diags depErrs mcwd
 
 callStackBuild :: Maybe FilePath -> Value -> IO ToolResult
 callStackBuild mcwd params = do
@@ -175,6 +184,7 @@ callStackBuild mcwd params = do
       ghcOpts = getParamText "ghc_options" params
       flags   = T.words (getParamText "flags" params)
       inclW   = getParamBool "include_warnings" params
+      inclO   = getParamBool "include_output" params
       args = ["build"] ++ targets
           ++ ["--fast" | fast]
           ++ ["--pedantic" | ped]
@@ -182,7 +192,7 @@ callStackBuild mcwd params = do
           ++ ["--file-watch" | watch]
           ++ ["--ghc-options" | not (T.null ghcOpts)] ++ [ghcOpts | not (T.null ghcOpts)]
           ++ flags
-  structuredBuild mcwd inclW args
+  structuredBuild mcwd inclW inclO args
 
 callStackTest :: Maybe FilePath -> Value -> IO ToolResult
 callStackTest mcwd params = do
@@ -191,11 +201,12 @@ callStackTest mcwd params = do
       ta       = getParamText "ta" params
       flags    = T.words (getParamText "flags" params)
       inclW    = getParamBool "include_warnings" params
+      inclO    = getParamBool "include_output" params
       args = ["test"] ++ targets
           ++ ["--coverage" | coverage]
           ++ ["--ta" | not (T.null ta)] ++ [ta | not (T.null ta)]
           ++ flags
-  structuredBuild mcwd inclW args
+  structuredBuild mcwd inclW inclO args
 
 callStackBench :: Maybe FilePath -> Value -> IO ToolResult
 callStackBench mcwd params = do
@@ -203,10 +214,11 @@ callStackBench mcwd params = do
       ba      = getParamText "ba" params
       flags   = T.words (getParamText "flags" params)
       inclW   = getParamBool "include_warnings" params
+      inclO   = getParamBool "include_output" params
       args = ["bench"] ++ targets
           ++ ["--ba" | not (T.null ba)] ++ [ba | not (T.null ba)]
           ++ flags
-  structuredBuild mcwd inclW args
+  structuredBuild mcwd inclW inclO args
 
 callStackHaddock :: Maybe FilePath -> Value -> IO ToolResult
 callStackHaddock mcwd params = do
@@ -215,19 +227,21 @@ callStackHaddock mcwd params = do
       noDeps  = getParamBool "no_deps" params
       flags   = T.words (getParamText "flags" params)
       inclW   = getParamBool "include_warnings" params
+      inclO   = getParamBool "include_output" params
       args = ["haddock"] ++ targets
           ++ ["--open" | doOpen]
           ++ ["--no-haddock-deps" | noDeps]
           ++ flags
-  structuredBuild mcwd inclW args
+  structuredBuild mcwd inclW inclO args
 
 callStackInstall :: Maybe FilePath -> Value -> IO ToolResult
 callStackInstall mcwd params = do
   let targets = T.words (getParamText "targets" params)
       flags   = T.words (getParamText "flags" params)
       inclW   = getParamBool "include_warnings" params
+      inclO   = getParamBool "include_output" params
       args    = ["install"] ++ targets ++ flags
-  structuredBuild mcwd inclW args
+  structuredBuild mcwd inclW inclO args
 
 callStackRun :: Maybe FilePath -> Value -> IO ToolResult
 callStackRun mcwd params = do
@@ -235,6 +249,7 @@ callStackRun mcwd params = do
       rArgs = T.words (getParamText "args" params)
       flags = T.words (getParamText "flags" params)
       inclW = getParamBool "include_warnings" params
+      inclO = getParamBool "include_output" params
       args = ["run"] ++ [exe | not (T.null exe)] ++ flags
           ++ (if null rArgs then [] else "--" : rArgs)
   so <- runStackRaw mcwd args
@@ -245,10 +260,10 @@ callStackRun mcwd params = do
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object $
            [ "success" .= True
-           , "output"  .= soStdout so
-           ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+           ] ++ ["output" .= soStdout so | inclO]
+             ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
              ++ rootField
-    _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
+    _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
 callStackClean :: Maybe FilePath -> Value -> IO ToolResult
 callStackClean mcwd params = do
@@ -271,11 +286,12 @@ callStackTypecheck mcwd params = do
   let targets = T.words (getParamText "targets" params)
       ghcOpts = getParamText "ghc_options" params
       inclW   = getParamBool "include_warnings" params
+      inclO   = getParamBool "include_output" params
       args = ["build"] ++ targets
           ++ ["--fast"]
           ++ ["--ghc-options", "-fno-code"]
           ++ ["--ghc-options" | not (T.null ghcOpts)] ++ [ghcOpts | not (T.null ghcOpts)]
-  structuredBuild mcwd inclW args
+  structuredBuild mcwd inclW inclO args
 
 callStackHpcReport :: Maybe FilePath -> Value -> IO ToolResult
 callStackHpcReport mcwd params = do

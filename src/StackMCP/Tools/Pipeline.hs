@@ -38,6 +38,7 @@ stackPipelineDef = ToolDef "stack_pipeline"
   mkSchema
     [ ("steps", arrayProp "Array of stack subcommand strings to execute in order (e.g. [\"build\", \"test\", \"haddock\"]).")
     , ("include_warnings", boolProp "Include GHC warnings in diagnostics (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr per step (default: false).")
     ] ["steps"]
 
 stackConfigReadDef :: ToolDef
@@ -58,10 +59,11 @@ callPipeline cwdRef params = do
   mcwd <- readIORef cwdRef
   let stepsRaw = getParamArray "steps" params
       inclW    = getParamBool "include_warnings" params
+      inclO    = getParamBool "include_output" params
   if null stepsRaw
     then pure $ mkToolError "steps parameter is required and must be a non-empty array"
     else do
-      results <- runPipeline mcwd inclW stepsRaw 1 []
+      results <- runPipeline mcwd inclW inclO stepsRaw 1 []
       let allSuccess = length results == length stepsRaw
       pure $ mkToolResultJSON $ object
         [ "success"         .= allSuccess
@@ -70,9 +72,9 @@ callPipeline cwdRef params = do
         , "results"         .= results
         ]
   where
-    runPipeline :: Maybe FilePath -> Bool -> [Text] -> Int -> [Value] -> IO [Value]
-    runPipeline _ _ [] _ acc = pure (reverse acc)
-    runPipeline mcwd' inclW (step:rest) n acc = do
+    runPipeline :: Maybe FilePath -> Bool -> Bool -> [Text] -> Int -> [Value] -> IO [Value]
+    runPipeline _ _ _ [] _ acc = pure (reverse acc)
+    runPipeline mcwd' inclW inclO (step:rest) n acc = do
       let args = T.words step
       so <- runStackBuild mcwd' args
       let success = soExitCode so == 0
@@ -85,10 +87,11 @@ callPipeline cwdRef params = do
             , "success" .= success
             ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
               ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
+              ++ ["output" .= soStdout so | inclO]
+              ++ ["stderr" .= soStderr so | inclO || (not success && null diags && null depErrs)]
               ++ ["exit_code" .= soExitCode so | not success]
-              ++ ["stderr" .= soStderr so | not success && null diags && null depErrs]
       if success
-        then runPipeline mcwd' inclW rest (n + 1) (result : acc)
+        then runPipeline mcwd' inclW inclO rest (n + 1) (result : acc)
         else pure (reverse (result : acc))
 
 callConfigRead :: IORef (Maybe FilePath) -> Value -> IO ToolResult

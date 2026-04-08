@@ -164,9 +164,10 @@ mkCommandErrorWithDiags args so diags depErrs mcwd = mkToolErrorJSON $ object $
 
 -- | Structured error with optional warning filtering.
 --   When @includeWarnings@ is False, warnings are omitted from diagnostics.
---   Raw output is only included when no structured diagnostics were parsed.
-mkCommandErrorFiltered :: Bool -> [Text] -> StackOutput -> [GhcDiagnostic] -> [DepError] -> Maybe FilePath -> ToolResult
-mkCommandErrorFiltered includeWarnings args so diags depErrs mcwd =
+--   When @includeOutput@ is False, raw stdout/stderr are omitted.
+--   Raw stderr is always included as a fallback when no structured diagnostics were parsed.
+mkCommandErrorFiltered :: Bool -> Bool -> [Text] -> StackOutput -> [GhcDiagnostic] -> [DepError] -> Maybe FilePath -> ToolResult
+mkCommandErrorFiltered includeWarnings includeOutput args so diags depErrs mcwd =
   let mDiagSummary = filteredDiagnosticsSummary includeWarnings diags
       hasStructured = not (null diags) || not (null depErrs)
   in mkToolErrorJSON $ object $
@@ -175,5 +176,6 @@ mkCommandErrorFiltered includeWarnings args so diags depErrs mcwd =
     , "command"     .= T.unwords ("stack" : args)
     ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
       ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
-      ++ ["raw_stderr" .= soStderr so | not hasStructured]
+      ++ ["raw_output" .= soStdout so | includeOutput]
+      ++ ["raw_stderr" .= soStderr so | includeOutput || not hasStructured]
       ++ maybe [] (\d -> ["project_root" .= T.pack d]) mcwd

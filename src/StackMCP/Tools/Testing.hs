@@ -54,6 +54,7 @@ stackTestRunDef = ToolDef "stack_test_run"
     , ("ta", strProp "Raw test arguments passed via --ta.")
     , ("flags", strProp "Additional raw flags for stack test.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] ["suite"]
 
 stackBenchDiscoverDef :: ToolDef
@@ -71,6 +72,7 @@ stackBenchRunDef = ToolDef "stack_bench_run"
     , ("ba", strProp "Raw benchmark arguments passed via --ba.")
     , ("flags", strProp "Additional raw flags for stack bench.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
+    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] ["suite"]
 
 ------------------------------------------------------------------------
@@ -144,6 +146,7 @@ callTestRun mcwd params = do
       rawTa     = getParamText "ta" params
       flags     = T.words (getParamText "flags" params)
       inclW     = getParamBool "include_warnings" params
+      inclO     = getParamBool "include_output" params
   if T.null suite
     then pure $ mkToolError "suite parameter is required"
     else do
@@ -168,8 +171,8 @@ callTestRun mcwd params = do
           result     = object $
             [ "success" .= success
             , "suite"   .= suite
-            , "output"  .= soStdout so
-            ] ++ rootField
+            ] ++ ["output" .= soStdout so | inclO]
+              ++ rootField
               ++ parsedCounts combined
               ++ (if null failures then []
                   else ["test_failures" .= testFailuresSummary failures])
@@ -198,6 +201,7 @@ callBenchRun mcwd params = do
       rawBa  = getParamText "ba" params
       flags  = T.words (getParamText "flags" params)
       inclW  = getParamBool "include_warnings" params
+      inclO  = getParamBool "include_output" params
   if T.null suite
     then pure $ mkToolError "suite parameter is required"
     else do
@@ -215,8 +219,8 @@ callBenchRun mcwd params = do
           result   = object $
             [ "success" .= success
             , "suite"   .= suite
-            , "output"  .= soStdout so
-            ] ++ rootField
+            ] ++ ["output" .= soStdout so | inclO]
+              ++ rootField
               ++ parsedCounts combined
               ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
       pure $ if success
