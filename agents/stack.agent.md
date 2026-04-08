@@ -64,4 +64,4 @@ Route tasks to the correct subagent based on the request:
 
 ## Pipeline Notes
 
-`stack_pipeline` runs raw `stack` subcommands directly (e.g. `["build", "test --coverage"]`). It does NOT dispatch through the tool layer, so pipeline steps won't include `project_root` or `return_content` enrichment. Treat it as opt-in only: do not use it as a fallback after a failed tool call, and do not use it for ordinary single-step build/test/run requests.
+`stack_pipeline` runs raw `stack` subcommands directly (e.g. `["build", "test --coverage"]`). It does NOT dispatch through the tool layer. Treat it as opt-in only: do not use it as a fallback after a failed tool call, and do not use it for ordinary single-step build/test/run requests.
