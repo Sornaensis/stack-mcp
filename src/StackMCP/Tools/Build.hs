@@ -7,7 +7,8 @@ module StackMCP.Tools.Build
 
 import Data.Text qualified as T
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseGhcDiagnostics, filteredDiagnosticsSummary, parseDepErrors)
+import StackMCP.Tools.Parse (parseGhcDiagnostics, filteredDiagnosticsSummary, parseDepErrors, depErrorsSummary, parseTestFailures, testFailuresSummary)
+import StackMCP.Tools.Testing (parsedCounts)
 
 tools :: [ToolDef]
 tools =
@@ -191,6 +192,36 @@ callStackBuild mcwd params = do
           ++ flags
   structuredBuild mcwd inclW inclO args
 
+-- | Like 'structuredBuild' but also parses test/benchmark counts and
+--   test failures from the combined output.  Used by stack_test and
+--   stack_bench so the model gets structured results by default.
+structuredTest :: Maybe FilePath -> Bool -> Bool -> [Text] -> IO ToolResult
+structuredTest mcwd includeWarnings includeOutput args = do
+  so <- runStackBuild mcwd args
+  let diags   = parseGhcDiagnostics (soStderr so)
+      depErrs = parseDepErrors (soStderr so)
+      mDiagSummary = filteredDiagnosticsSummary includeWarnings diags
+      combined  = soStdout so <> "\n" <> soStderr so
+      failures  = parseTestFailures combined
+      counts    = parsedCounts combined
+  pure $ case soExitCode so of
+    0 -> mkToolResultJSON $ object $
+           maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+             ++ counts
+             ++ ["output" .= soStdout so | includeOutput]
+    _ -> mkToolErrorJSON $ object $
+           [ "error_type" .= ("command_failed" :: Text)
+           , "exit_code"  .= soExitCode so
+           , "command"    .= T.unwords ("stack" : args)
+           ] ++ counts
+             ++ (if null failures then []
+                 else ["test_failures" .= testFailuresSummary failures])
+             ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+             ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
+             ++ ["raw_output" .= soStdout so | includeOutput]
+             ++ ["raw_stderr" .= soStderr so | includeOutput || (null diags && null depErrs && null failures)]
+             ++ maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
+
 callStackTest :: Maybe FilePath -> Value -> IO ToolResult
 callStackTest mcwd params = do
   let targets  = T.words (getParamText "targets" params)
@@ -203,7 +234,7 @@ callStackTest mcwd params = do
           ++ ["--coverage" | coverage]
           ++ ["--ta" | not (T.null ta)] ++ [ta | not (T.null ta)]
           ++ flags
-  structuredBuild mcwd inclW inclO args
+  structuredTest mcwd inclW inclO args
 
 callStackBench :: Maybe FilePath -> Value -> IO ToolResult
 callStackBench mcwd params = do
@@ -215,7 +246,7 @@ callStackBench mcwd params = do
       args = ["bench"] ++ targets
           ++ ["--ba" | not (T.null ba)] ++ [ba | not (T.null ba)]
           ++ flags
-  structuredBuild mcwd inclW inclO args
+  structuredTest mcwd inclW inclO args
 
 callStackHaddock :: Maybe FilePath -> Value -> IO ToolResult
 callStackHaddock mcwd params = do

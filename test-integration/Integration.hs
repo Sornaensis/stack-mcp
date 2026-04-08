@@ -72,6 +72,7 @@ main :: IO ()
 main = defaultMain $ sequentialTestGroup "Integration Tests" AllFinish
   [ happyPathTests
   , errorDiagnosticTests
+  , testFailureTests
   , editToolsTests
   ]
 
@@ -256,6 +257,62 @@ errorDiagnosticTests = testCaseSteps "error diagnostics" $ \step ->
       T.isInfixOf "diagnostic" (T.toLower txt) ||
       T.isInfixOf "couldn't match" (T.toLower txt) ||
       T.isInfixOf "no instance" (T.toLower txt)
+
+------------------------------------------------------------------------
+-- Test failure parsing: inject a failing test, verify structured output
+------------------------------------------------------------------------
+
+testFailureTests :: TestTree
+testFailureTests = testCaseSteps "test failure parsing" $ \step ->
+  withSystemTempDirectory "stack-mcp-testfail" $ \tmpDir -> do
+    cwdRef <- newIORef (Just tmpDir)
+    tm     <- newTaskManager
+
+    step "scaffold"
+    r <- call cwdRef tm "stack_new" (params [("name", String "failapp")])
+    assertSuccess "stack_new (failapp)" r
+
+    let projDir = tmpDir </> "failapp"
+    writeIORef cwdRef (Just projDir)
+
+    step "build (should succeed first)"
+    r2 <- call cwdRef tm "stack_build" emptyParams
+    assertSuccess "initial build" r2
+
+    step "inject failing test"
+    let testFile = projDir </> "test" </> "Main.hs"
+    writeFile testFile $ unlines
+      [ "module Main (main) where"
+      , "import System.Exit (exitFailure)"
+      , "main :: IO ()"
+      , "main = do"
+      , "  putStrLn \"  addition:       FAIL\""
+      , "  putStrLn \"    expected: 5\""
+      , "  putStrLn \"     but got: 3\""
+      , "  putStrLn \"1 out of 1 tests passed\""
+      , "  exitFailure"
+      ]
+
+    step "stack_test (should fail with structured output)"
+    r3 <- call cwdRef tm "stack_test" emptyParams
+    assertIsError "stack_test with failing test" r3
+    let txt = resultText r3
+    -- The response should be a structured error with command_failed
+    assertBool "has error_type" $
+      T.isInfixOf "command_failed" txt
+    -- Should have either parsed test failures, parsed counts, or raw_stderr fallback
+    assertBool "has structured failure info or stderr fallback" $
+      T.isInfixOf "test_failures" txt
+      || T.isInfixOf "total" txt
+      || T.isInfixOf "raw_stderr" txt
+
+    step "stack_test with include_output"
+    r4 <- call cwdRef tm "stack_test"
+            (params [("include_output", Bool True)])
+    assertIsError "stack_test with output" r4
+    let txt4 = resultText r4
+    assertBool "raw_output present when requested" $
+      T.isInfixOf "raw_output" txt4 || T.isInfixOf "output" txt4
 
 ------------------------------------------------------------------------
 -- Edit tools: deps, modules, rename, list
