@@ -188,8 +188,7 @@ callStackLsDeps mcwd params = do
                    | l <- ls
                    ]
       pure $ mkToolResultJSON $ object
-        [ "count"        .= length parsed
-        , "dependencies" .= parsed
+        [ "dependencies" .= parsed
         ]
     _ -> pure $ mkCommandError args so
 
@@ -256,7 +255,7 @@ callStackUnpack mcwd params = do
       so <- runStackBuild mcwd args
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object
-          ["success" .= True, "package" .= pkg, "output" .= soStdout so]
+          ["package" .= pkg, "output" .= soStdout so]
         _ -> mkCommandError args so
 
 callStackUpdate :: Maybe FilePath -> IO ToolResult
@@ -264,7 +263,7 @@ callStackUpdate mcwd = do
   let args = ["update"]
   so <- runStackBuild mcwd args
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so
 
 callStackList :: Maybe FilePath -> Value -> IO ToolResult
@@ -279,8 +278,7 @@ callStackList mcwd params = do
     0 -> do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
       pure $ mkToolResultJSON $ object
-        [ "count"    .= length ls
-        , "packages" .= ls
+        [ "packages" .= ls
         ]
     _ -> pure $ mkCommandError args so
 
@@ -311,7 +309,7 @@ callStackSdist mcwd params = do
       args    = ["sdist"] ++ targets ++ flags
   so <- runStackBuild mcwd args
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so
 
 callStackUpload :: Maybe FilePath -> Value -> IO ToolResult
@@ -326,7 +324,7 @@ callStackUpload mcwd params = do
           ++ flags
   so <- runStackBuild mcwd args
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so
 
 ------------------------------------------------------------------------

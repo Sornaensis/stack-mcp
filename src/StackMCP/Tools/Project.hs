@@ -100,8 +100,7 @@ callStackNew mcwd params = do
       so <- runStackRaw mcwd args
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object
-          [ "success" .= True, "project" .= name, "output" .= soStdout so
-          , "next_steps" .= (["Call set_repo with the new project directory", "Run stack_setup to install GHC", "Run stack_build to compile"] :: [Text])
+          [ "project" .= name, "output" .= soStdout so
           ]
         _ -> mkCommandError args so
 
@@ -114,7 +113,7 @@ callStackInit mcwd params = do
           ++ ["--force" | force]
   so <- runStackRaw mcwd args
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so
 
 callStackSetup :: Maybe FilePath -> Value -> IO ToolResult
@@ -124,8 +123,7 @@ callStackSetup mcwd params = do
   so <- runStackRaw mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object
-      [ "success" .= True, "output" .= soStdout so
-      , "next_step" .= ("GHC is ready. Run stack_build to compile the project." :: Text)
+      [ "output" .= soStdout so
       ]
     _ -> mkCommandError args so
 
@@ -148,7 +146,7 @@ callStackConfigSet mcwd params = do
       so <- runStackRaw mcwd args
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object
-          ["success" .= True, "key" .= key, "value" .= val]
+          ["key" .= key, "value" .= val]
         _ -> mkCommandError args so
 
 callStackConfigEnv :: Maybe FilePath -> IO ToolResult
@@ -174,5 +172,5 @@ callStackConfigBuildFiles :: Maybe FilePath -> IO ToolResult
 callStackConfigBuildFiles mcwd = do
   so <- runStackRaw mcwd ["config", "build-files"]
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError ["config", "build-files"] so

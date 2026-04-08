@@ -153,8 +153,7 @@ callStackLsStackColors mcwd = do
     0 -> do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
       pure $ mkToolResultJSON $ object
-        [ "count"  .= length ls
-        , "colors" .= ls
+        [ "colors" .= ls
         ]
     _ -> pure $ mkCommandError ["ls", "stack-colors"] so
 
@@ -172,8 +171,7 @@ callStackIdeTargets mcwd params = do
     0 -> do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
       pure $ mkToolResultJSON $ object
-        [ "count"   .= length ls
-        , "targets" .= ls
+        [ "targets" .= ls
         ]
     _ -> pure $ mkCommandError args so
 
@@ -184,8 +182,7 @@ callStackIdePackages mcwd = do
     0 -> do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
       pure $ mkToolResultJSON $ object
-        [ "count"    .= length ls
-        , "packages" .= ls
+        [ "packages" .= ls
         ]
     _ -> pure $ mkCommandError ["ide", "packages"] so
 
@@ -202,5 +199,5 @@ callStackUpgrade mcwd params = do
       args = ["upgrade"] ++ ["--binary-only" | binOnly]
   so <- runStackRaw mcwd args
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so

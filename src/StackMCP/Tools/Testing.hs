@@ -92,8 +92,7 @@ callTestDiscover mcwd params = do
           let targets = filter (not . T.null) $ T.lines (soStdout so)
               parsed  = map parseTarget targets
           pure $ mkToolResultJSON $ object
-            [ "count"   .= length parsed
-            , "suites"  .= parsed
+            [ "suites"  .= parsed
             ]
         _ -> pure $ mkCommandError ["ide", "targets", "--stdout", "--tests"] so
     else do
@@ -110,7 +109,6 @@ callTestDiscover mcwd params = do
               tests    = map T.strip rawLines
           pure $ mkToolResultJSON $ object
             [ "suite"  .= suite
-            , "count"  .= length tests
             , "tests"  .= tests
             ]
         _ -> do
@@ -125,7 +123,6 @@ callTestDiscover mcwd params = do
                   let rawLines = filter (not . T.null) $ T.lines (soStdout so2)
                   pure $ mkToolResultJSON $ object
                     [ "suite"  .= suite
-                    , "count"  .= length rawLines
                     , "tests"  .= map T.strip rawLines
                     , "note"   .= ("Discovered via hspec --dry-run fallback" :: Text)
                     ]
@@ -166,13 +163,10 @@ callTestRun mcwd params = do
           combined   = soStdout so <> "\n" <> soStderr so
           failures   = parseTestFailures combined
           diags      = parseGhcDiagnostics (soStderr so)
-          rootField  = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
           mDiagSummary = filteredDiagnosticsSummary inclW diags
           result     = object $
-            [ "success" .= success
-            , "suite"   .= suite
+            [ "suite"   .= suite
             ] ++ ["output" .= soStdout so | inclO]
-              ++ rootField
               ++ parsedCounts combined
               ++ (if null failures then []
                   else ["test_failures" .= testFailuresSummary failures])
@@ -189,8 +183,7 @@ callBenchDiscover mcwd _params = do
       let targets = filter (not . T.null) $ T.lines (soStdout so)
           parsed  = map parseTarget targets
       pure $ mkToolResultJSON $ object
-        [ "count"  .= length parsed
-        , "suites" .= parsed
+        [ "suites" .= parsed
         ]
     _ -> pure $ mkCommandError ["ide", "targets", "--stdout", "--benchmarks"] so
 
@@ -214,13 +207,10 @@ callBenchRun mcwd params = do
       let success  = soExitCode so == 0
           combined = soStdout so <> "\n" <> soStderr so
           diags    = parseGhcDiagnostics (soStderr so)
-          rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
           mDiagSummary = filteredDiagnosticsSummary inclW diags
           result   = object $
-            [ "success" .= success
-            , "suite"   .= suite
+            [ "suite"   .= suite
             ] ++ ["output" .= soStdout so | inclO]
-              ++ rootField
               ++ parsedCounts combined
               ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
       pure $ if success

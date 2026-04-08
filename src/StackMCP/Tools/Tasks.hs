@@ -316,6 +316,5 @@ callTaskList tm = do
       statusText (Exited 0) = "exited_success"
       statusText (Exited _) = "exited_error"
   pure $ mkToolResultJSON $ object
-    [ "count" .= length infos
-    , "tasks" .= map toObj infos
+    [ "tasks" .= map toObj infos
     ]

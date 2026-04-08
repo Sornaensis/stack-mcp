@@ -64,10 +64,8 @@ callPipeline cwdRef params = do
     then pure $ mkToolError "steps parameter is required and must be a non-empty array"
     else do
       results <- runPipeline mcwd inclW inclO stepsRaw 1 []
-      let allSuccess = length results == length stepsRaw
       pure $ mkToolResultJSON $ object
-        [ "success"         .= allSuccess
-        , "steps_completed" .= length results
+        [ "steps_completed" .= length results
         , "steps_total"     .= length stepsRaw
         , "results"         .= results
         ]
@@ -83,9 +81,9 @@ callPipeline cwdRef params = do
           mDiagSummary = filteredDiagnosticsSummary inclW diags
           result  = object $
             [ "step"    .= n
-            , "command" .= ("stack " <> step)
             , "success" .= success
-            ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+            ] ++ ["command" .= ("stack " <> step) | not success]
+              ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
               ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
               ++ ["output" .= soStdout so | inclO]
               ++ ["stderr" .= soStderr so | inclO || (not success && null diags && null depErrs)]

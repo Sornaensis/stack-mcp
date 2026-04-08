@@ -164,14 +164,11 @@ structuredBuild mcwd includeWarnings includeOutput args = do
   so <- runStackBuild mcwd args
   let diags = parseGhcDiagnostics (soStderr so)
       depErrs = parseDepErrors (soStderr so)
-      rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
       mDiagSummary = filteredDiagnosticsSummary includeWarnings diags
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object $
-           [ "success" .= True
-           ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+           maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
              ++ ["output" .= soStdout so | includeOutput]
-             ++ rootField
     _ -> mkCommandErrorFiltered includeWarnings includeOutput args so diags depErrs mcwd
 
 callStackBuild :: Maybe FilePath -> Value -> IO ToolResult
@@ -255,14 +252,11 @@ callStackRun mcwd params = do
   so <- runStackRaw mcwd args
   let diags = parseGhcDiagnostics (soStderr so)
       depErrs = parseDepErrors (soStderr so)
-      rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
       mDiagSummary = filteredDiagnosticsSummary inclW diags
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object $
-           [ "success" .= True
-           ] ++ ["output" .= soStdout so | inclO]
+           ["output" .= soStdout so | inclO]
              ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
-             ++ rootField
     _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
 callStackClean :: Maybe FilePath -> Value -> IO ToolResult
@@ -271,14 +265,14 @@ callStackClean mcwd params = do
       args = ["clean"] ++ ["--full" | full]
   so <- runStackBuild mcwd args
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so
 
 callStackPurge :: Maybe FilePath -> IO ToolResult
 callStackPurge mcwd = do
   so <- runStackBuild mcwd ["purge"]
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["success" .= True, "output" .= soStdout so]
+    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError ["purge"] so
 
 callStackTypecheck :: Maybe FilePath -> Value -> IO ToolResult
@@ -307,7 +301,6 @@ callStackHpcReport mcwd params = do
   so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object
-           [ "success" .= True
-           , "output"  .= soStdout so
+           [ "output"  .= soStdout so
            ]
     _ -> mkCommandError args so

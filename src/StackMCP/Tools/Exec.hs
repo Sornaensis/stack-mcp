@@ -153,8 +153,7 @@ callStackGhci mcwd params = do
       mDiag   = filteredDiagnosticsSummary inclW diags
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object $
-           [ "exit_code" .= (0 :: Int)
-           ] ++ ["stdout" .= soStdout so | inclO]
+           ["stdout" .= soStdout so | inclO]
              ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
     _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
@@ -173,8 +172,7 @@ callStackGhc mcwd params = do
           mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
-               [ "exit_code" .= (0 :: Int)
-               ] ++ ["stdout" .= soStdout so | inclO]
+               ["stdout" .= soStdout so | inclO]
                  ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
         _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
@@ -193,8 +191,7 @@ callStackEval mcwd params = do
           mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
-               [ "exit_code" .= (0 :: Int)
-               , "result"    .= T.strip (soStdout so)
+               [ "result"    .= T.strip (soStdout so)
                ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
         _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
@@ -214,8 +211,7 @@ callStackRunghc mcwd params = do
           mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
-               [ "exit_code" .= (0 :: Int)
-               ] ++ ["stdout" .= soStdout so | inclO]
+               ["stdout" .= soStdout so | inclO]
                  ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
         _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
@@ -238,8 +234,7 @@ callStackScript mcwd params = do
           mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
-               [ "exit_code" .= (0 :: Int)
-               ] ++ ["stdout" .= soStdout so | inclO]
+               ["stdout" .= soStdout so | inclO]
                  ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
         _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
