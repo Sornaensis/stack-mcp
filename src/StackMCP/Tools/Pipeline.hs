@@ -13,7 +13,7 @@ import Data.Text.IO qualified as TIO
 import System.Directory (getCurrentDirectory, listDirectory, doesFileExist, canonicalizePath)
 import System.FilePath ((</>), takeExtension, normalise, isRelative, pathSeparator, splitDirectories, dropTrailingPathSeparator)
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary, parseDepErrors, depErrorsSummary)
+import StackMCP.Tools.Parse (parseGhcDiagnostics, filteredDiagnosticsSummary, parseDepErrors, depErrorsSummary)
 
 tools :: [ToolDef]
 tools =
@@ -37,6 +37,7 @@ stackPipelineDef = ToolDef "stack_pipeline"
   \Returns structured JSON with results for each step." $
   mkSchema
     [ ("steps", arrayProp "Array of stack subcommand strings to execute in order (e.g. [\"build\", \"test\", \"haddock\"]).")
+    , ("include_warnings", boolProp "Include GHC warnings in diagnostics (default: false).")
     ] ["steps"]
 
 stackConfigReadDef :: ToolDef
@@ -56,10 +57,11 @@ callPipeline :: IORef (Maybe FilePath) -> Value -> IO ToolResult
 callPipeline cwdRef params = do
   mcwd <- readIORef cwdRef
   let stepsRaw = getParamArray "steps" params
+      inclW    = getParamBool "include_warnings" params
   if null stepsRaw
     then pure $ mkToolError "steps parameter is required and must be a non-empty array"
     else do
-      results <- runPipeline mcwd stepsRaw 1 []
+      results <- runPipeline mcwd inclW stepsRaw 1 []
       let allSuccess = length results == length stepsRaw
       pure $ mkToolResultJSON $ object
         [ "success"         .= allSuccess
@@ -68,25 +70,25 @@ callPipeline cwdRef params = do
         , "results"         .= results
         ]
   where
-    runPipeline :: Maybe FilePath -> [Text] -> Int -> [Value] -> IO [Value]
-    runPipeline _ [] _ acc = pure (reverse acc)
-    runPipeline mcwd' (step:rest) n acc = do
+    runPipeline :: Maybe FilePath -> Bool -> [Text] -> Int -> [Value] -> IO [Value]
+    runPipeline _ _ [] _ acc = pure (reverse acc)
+    runPipeline mcwd' inclW (step:rest) n acc = do
       let args = T.words step
       so <- runStackBuild mcwd' args
       let success = soExitCode so == 0
           diags   = parseGhcDiagnostics (soStderr so)
           depErrs = parseDepErrors (soStderr so)
+          mDiagSummary = filteredDiagnosticsSummary inclW diags
           result  = object $
             [ "step"    .= n
             , "command" .= ("stack " <> step)
             , "success" .= success
-            , "output"  .= soStdout so
-            , "stderr"  .= soStderr so
-            ] ++ ["diagnostics" .= diagnosticsSummary diags | not (null diags)]
+            ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
               ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
               ++ ["exit_code" .= soExitCode so | not success]
+              ++ ["stderr" .= soStderr so | not success && null diags && null depErrs]
       if success
-        then runPipeline mcwd' rest (n + 1) (result : acc)
+        then runPipeline mcwd' inclW rest (n + 1) (result : acc)
         else pure (reverse (result : acc))
 
 callConfigRead :: IORef (Maybe FilePath) -> Value -> IO ToolResult

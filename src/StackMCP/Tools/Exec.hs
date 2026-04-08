@@ -7,7 +7,7 @@ module StackMCP.Tools.Exec
 
 import Data.Text qualified as T
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseGhcDiagnostics, diagnosticsSummary, parseDepErrors)
+import StackMCP.Tools.Parse (parseGhcDiagnostics, filteredDiagnosticsSummary, parseDepErrors)
 
 tools :: [ToolDef]
 tools =
@@ -43,6 +43,7 @@ stackExecDef = ToolDef "stack_exec"
   mkSchema
     [ ("command", strProp "The command to execute (required).")
     , ("args", strProp "Space-separated arguments for the command.")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] ["command"]
 
 stackGhciDef :: ToolDef
@@ -53,6 +54,7 @@ stackGhciDef = ToolDef "stack_ghci"
     [ ("targets", strProp "Targets to load in GHCi.")
     , ("no_load", boolProp "Do not load modules at start (--no-load). Defaults to false (modules are loaded normally).")
     , ("flags", strProp "Additional raw flags.")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] []
 
 stackGhcDef :: ToolDef
@@ -61,6 +63,7 @@ stackGhcDef = ToolDef "stack_ghc"
   \For evaluating a Haskell expression, prefer stack_eval (simpler interface)." $
   mkSchema
     [ ("args", strProp "Arguments to pass to GHC (e.g. \"--version\", \"-e 'print 42'\").")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] ["args"]
 
 stackEvalDef :: ToolDef
@@ -69,6 +72,7 @@ stackEvalDef = ToolDef "stack_eval"
   \Prefer this over stack_ghc for simple expression evaluation." $
   mkSchema
     [ ("expression", strProp "Haskell expression to evaluate (required).")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] ["expression"]
 
 stackRunghcDef :: ToolDef
@@ -78,6 +82,7 @@ stackRunghcDef = ToolDef "stack_runghc"
   mkSchema
     [ ("file", strProp "Path to the Haskell source file (required).")
     , ("args", strProp "Additional arguments.")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] ["file"]
 
 stackScriptDef :: ToolDef
@@ -88,6 +93,7 @@ stackScriptDef = ToolDef "stack_script"
     [ ("file", strProp "Path to the script file (required).")
     , ("resolver", strProp "Snapshot resolver for the script.")
     , ("args", strProp "Additional arguments.")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] ["file"]
 
 stackHoogleDef :: ToolDef
@@ -110,18 +116,19 @@ callStackExec :: Maybe FilePath -> Value -> IO ToolResult
 callStackExec mcwd params = do
   let cmd     = getParamText "command" params
       cmdArgs = T.words (getParamText "args" params)
+      inclW   = getParamBool "include_warnings" params
   if T.null cmd
     then pure $ mkToolError "command parameter is required"
     else do
       let args = ["exec", cmd, "--"] ++ cmdArgs
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
-          diagField = if null diags then [] else ["diagnostics" .= diagnosticsSummary diags]
+          mDiag = filteredDiagnosticsSummary inclW diags
       pure $ mkToolResultJSON $ object $
         [ "exit_code" .= soExitCode so
         , "stdout"    .= soStdout so
-        , "stderr"    .= soStderr so
-        ] ++ diagField
+        ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
+          ++ ["stderr" .= soStderr so | soExitCode so /= 0 && null diags]
 
 callStackGhci :: Maybe FilePath -> Value -> IO ToolResult
 callStackGhci mcwd params = do
@@ -130,22 +137,23 @@ callStackGhci mcwd params = do
                   Just b  -> b
                   Nothing -> False  -- default: load modules normally
       flags   = T.words (getParamText "flags" params)
+      inclW   = getParamBool "include_warnings" params
       args    = ["ghci"] ++ targets ++ ["--no-load" | noLoad] ++ flags
   so <- runStackRaw mcwd args
   let diags   = parseGhcDiagnostics (soStderr so)
       depErrs = parseDepErrors (soStderr so)
+      mDiag   = filteredDiagnosticsSummary inclW diags
   pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object
-           [ "exit_code"   .= (0 :: Int)
-           , "stdout"      .= soStdout so
-           , "stderr"      .= soStderr so
-           , "diagnostics" .= diagnosticsSummary diags
-           ]
-    _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
+    0 -> mkToolResultJSON $ object $
+           [ "exit_code" .= (0 :: Int)
+           , "stdout"    .= soStdout so
+           ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
+    _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
 
 callStackGhc :: Maybe FilePath -> Value -> IO ToolResult
 callStackGhc mcwd params = do
   let ghcArgs = T.words (getParamText "args" params)
+      inclW   = getParamBool "include_warnings" params
   if null ghcArgs
     then pure $ mkToolError "args parameter is required"
     else do
@@ -153,18 +161,18 @@ callStackGhc mcwd params = do
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
           depErrs = parseDepErrors (soStderr so)
+          mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
-        0 -> mkToolResultJSON $ object
-               [ "exit_code"   .= (0 :: Int)
-               , "stdout"      .= soStdout so
-               , "stderr"      .= soStderr so
-               , "diagnostics" .= diagnosticsSummary diags
-               ]
-        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
+        0 -> mkToolResultJSON $ object $
+               [ "exit_code" .= (0 :: Int)
+               , "stdout"    .= soStdout so
+               ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
+        _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
 
 callStackEval :: Maybe FilePath -> Value -> IO ToolResult
 callStackEval mcwd params = do
-  let expr = getParamText "expression" params
+  let expr  = getParamText "expression" params
+      inclW = getParamBool "include_warnings" params
   if T.null expr
     then pure $ mkToolError "expression parameter is required"
     else do
@@ -172,19 +180,19 @@ callStackEval mcwd params = do
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
           depErrs = parseDepErrors (soStderr so)
-          diagField = if null diags then [] else ["diagnostics" .= diagnosticsSummary diags]
+          mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
                [ "exit_code" .= (0 :: Int)
                , "result"    .= T.strip (soStdout so)
-               , "stderr"    .= soStderr so
-               ] ++ diagField
-        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
+               ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
+        _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
 
 callStackRunghc :: Maybe FilePath -> Value -> IO ToolResult
 callStackRunghc mcwd params = do
   let file    = getParamText "file" params
       rArgs   = T.words (getParamText "args" params)
+      inclW   = getParamBool "include_warnings" params
   if T.null file
     then pure $ mkToolError "file parameter is required"
     else do
@@ -192,20 +200,20 @@ callStackRunghc mcwd params = do
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
           depErrs = parseDepErrors (soStderr so)
-          diagField = if null diags then [] else ["diagnostics" .= diagnosticsSummary diags]
+          mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
                [ "exit_code" .= (0 :: Int)
                , "stdout"    .= soStdout so
-               , "stderr"    .= soStderr so
-               ] ++ diagField
-        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
+               ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
+        _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
 
 callStackScript :: Maybe FilePath -> Value -> IO ToolResult
 callStackScript mcwd params = do
   let file     = getParamText "file" params
       resolver = getParamText "resolver" params
       rArgs    = T.words (getParamText "args" params)
+      inclW    = getParamBool "include_warnings" params
   if T.null file
     then pure $ mkToolError "file parameter is required"
     else do
@@ -215,14 +223,13 @@ callStackScript mcwd params = do
       so <- runStackRaw mcwd args
       let diags = parseGhcDiagnostics (soStderr so)
           depErrs = parseDepErrors (soStderr so)
-          diagField = if null diags then [] else ["diagnostics" .= diagnosticsSummary diags]
+          mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
                [ "exit_code" .= (0 :: Int)
                , "stdout"    .= soStdout so
-               , "stderr"    .= soStderr so
-               ] ++ diagField
-        _ -> mkCommandErrorWithDiags args so diags depErrs mcwd
+               ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
+        _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
 
 callStackHoogle :: Maybe FilePath -> Value -> IO ToolResult
 callStackHoogle mcwd params = do

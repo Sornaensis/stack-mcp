@@ -19,6 +19,7 @@ module StackMCP.Tools.Common
     -- * Structured error helpers
   , mkCommandError
   , mkCommandErrorWithDiags
+  , mkCommandErrorFiltered
     -- * Re-exports for tool modules
   , module Data.Aeson
   , Text
@@ -42,7 +43,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import StackMCP.Types (ToolDef(..), ToolResult, mkToolResult, mkToolResultJSON, mkToolError, mkToolErrorJSON, mkStructuredError)
 import StackMCP.Process (runStackRaw, runStackBuild, StackOutput(..))
-import StackMCP.Tools.Parse (GhcDiagnostic, parseGhcDiagnostics, diagnosticsSummary, DepError, parseDepErrors, depErrorsSummary)
+import StackMCP.Tools.Parse (GhcDiagnostic, parseGhcDiagnostics, diagnosticsSummary, filteredDiagnosticsSummary, DepError, parseDepErrors, depErrorsSummary)
 
 ------------------------------------------------------------------------
 -- Parameter extraction
@@ -160,3 +161,19 @@ mkCommandErrorWithDiags args so diags depErrs mcwd = mkToolErrorJSON $ object $
   , "raw_stderr"   .= soStderr so
   ] ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
     ++ maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
+
+-- | Structured error with optional warning filtering.
+--   When @includeWarnings@ is False, warnings are omitted from diagnostics.
+--   Raw output is only included when no structured diagnostics were parsed.
+mkCommandErrorFiltered :: Bool -> [Text] -> StackOutput -> [GhcDiagnostic] -> [DepError] -> Maybe FilePath -> ToolResult
+mkCommandErrorFiltered includeWarnings args so diags depErrs mcwd =
+  let mDiagSummary = filteredDiagnosticsSummary includeWarnings diags
+      hasStructured = not (null diags) || not (null depErrs)
+  in mkToolErrorJSON $ object $
+    [ "error_type"  .= ("command_failed" :: Text)
+    , "exit_code"   .= soExitCode so
+    , "command"     .= T.unwords ("stack" : args)
+    ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+      ++ ["dependency_errors" .= depErrorsSummary depErrs | not (null depErrs)]
+      ++ ["raw_stderr" .= soStderr so | not hasStructured]
+      ++ maybe [] (\d -> ["project_root" .= T.pack d]) mcwd

@@ -10,7 +10,7 @@ module StackMCP.Tools.Testing
 
 import Data.Text qualified as T
 import StackMCP.Tools.Common
-import StackMCP.Tools.Parse (parseTestFailures, testFailuresSummary, parseGhcDiagnostics, diagnosticsSummary, readInt)
+import StackMCP.Tools.Parse (parseTestFailures, testFailuresSummary, parseGhcDiagnostics, filteredDiagnosticsSummary, readInt)
 
 tools :: [ToolDef]
 tools =
@@ -53,6 +53,7 @@ stackTestRunDef = ToolDef "stack_test_run"
     , ("coverage", boolProp "Enable code coverage (--coverage).")
     , ("ta", strProp "Raw test arguments passed via --ta.")
     , ("flags", strProp "Additional raw flags for stack test.")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] ["suite"]
 
 stackBenchDiscoverDef :: ToolDef
@@ -69,6 +70,7 @@ stackBenchRunDef = ToolDef "stack_bench_run"
     , ("match", strProp "Pattern to match specific benchmarks (criterion: passed via --ba \"--match pattern\").")
     , ("ba", strProp "Raw benchmark arguments passed via --ba.")
     , ("flags", strProp "Additional raw flags for stack bench.")
+    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     ] ["suite"]
 
 ------------------------------------------------------------------------
@@ -141,6 +143,7 @@ callTestRun mcwd params = do
       coverage  = getParamBool "coverage" params
       rawTa     = getParamText "ta" params
       flags     = T.words (getParamText "flags" params)
+      inclW     = getParamBool "include_warnings" params
   if T.null suite
     then pure $ mkToolError "suite parameter is required"
     else do
@@ -161,17 +164,16 @@ callTestRun mcwd params = do
           failures   = parseTestFailures combined
           diags      = parseGhcDiagnostics (soStderr so)
           rootField  = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
+          mDiagSummary = filteredDiagnosticsSummary inclW diags
           result     = object $
             [ "success" .= success
             , "suite"   .= suite
             , "output"  .= soStdout so
-            , "stderr"  .= soStderr so
             ] ++ rootField
               ++ parsedCounts combined
               ++ (if null failures then []
                   else ["test_failures" .= testFailuresSummary failures])
-              ++ (if null diags then []
-                  else ["diagnostics" .= diagnosticsSummary diags])
+              ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
       pure $ if success
         then mkToolResultJSON result
         else mkToolErrorJSON result
@@ -195,6 +197,7 @@ callBenchRun mcwd params = do
       match  = getParamText "match" params
       rawBa  = getParamText "ba" params
       flags  = T.words (getParamText "flags" params)
+      inclW  = getParamBool "include_warnings" params
   if T.null suite
     then pure $ mkToolError "suite parameter is required"
     else do
@@ -208,15 +211,14 @@ callBenchRun mcwd params = do
           combined = soStdout so <> "\n" <> soStderr so
           diags    = parseGhcDiagnostics (soStderr so)
           rootField = maybe [] (\d -> ["project_root" .= T.pack d]) mcwd
+          mDiagSummary = filteredDiagnosticsSummary inclW diags
           result   = object $
             [ "success" .= success
             , "suite"   .= suite
             , "output"  .= soStdout so
-            , "stderr"  .= soStderr so
             ] ++ rootField
               ++ parsedCounts combined
-              ++ (if null diags then []
-                  else ["diagnostics" .= diagnosticsSummary diags])
+              ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
       pure $ if success
         then mkToolResultJSON result
         else mkToolErrorJSON result

@@ -6,6 +6,7 @@ module StackMCP.Tools.Parse
   , Severity(..)
   , parseGhcDiagnostics
   , diagnosticsSummary
+  , filteredDiagnosticsSummary
     -- * Dependency Errors
   , DepError(..)
   , parseDepErrors
@@ -145,6 +146,21 @@ diagnosticsSummary diags =
     , "error_count"   .= length errs
     , "warning_count" .= length warns
     ]
+
+-- | Produce a JSON summary with optional warning inclusion.
+--   When @includeWarnings@ is False, warnings are omitted entirely.
+--   Returns Nothing when there are no diagnostics to report.
+filteredDiagnosticsSummary :: Bool -> [GhcDiagnostic] -> Maybe Value
+filteredDiagnosticsSummary includeWarnings diags =
+  let errs  = filter ((== SevError)   . diagSeverity) diags
+      warns = filter ((== SevWarning) . diagSeverity) diags
+  in case (null errs, null warns || not includeWarnings) of
+    (True, True) -> Nothing
+    _ -> Just $ object $
+      [ "errors"      .= errs
+      , "error_count" .= length errs
+      ] ++ [ "warnings"      .= warns | includeWarnings && not (null warns) ]
+        ++ [ "warning_count" .= length warns | includeWarnings && not (null warns) ]
 
 ------------------------------------------------------------------------
 -- Dependency Errors
