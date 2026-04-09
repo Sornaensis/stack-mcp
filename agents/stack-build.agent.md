@@ -11,9 +11,6 @@ tools:
   - stack_mcp/stack_install
   - stack_mcp/stack_run
   - stack_mcp/stack_clean
-  - stack_mcp/stack_purge
-  - stack_mcp/stack_hpc_report
-  - stack_mcp/stack_typecheck
   - stack_mcp/stack_test_run
   - stack_mcp/stack_bench_run
 ---
@@ -46,10 +43,7 @@ When prompted to perform an operation:
 | `stack_haddock` | Generate Haddock documentation with --open, --no-haddock-deps |
 | `stack_install` | Build and copy executables to local-bin-path |
 | `stack_run` | Build and run an executable with arguments |
-| `stack_clean` | Delete build artifacts (--full for .stack-work) |
-| `stack_purge` | Delete all project Stack working directories |
-| `stack_hpc_report` | Generate unified HPC coverage report from tix files (use after --coverage test run) |
-| `stack_typecheck` | Fast typecheck-only build (no linking, no codegen). Ideal for quick error checking |
+| `stack_clean` | Delete build artifacts (--full for .stack-work, purge=true for full reset) |
 | `stack_test_run` | Run a specific test suite with optional pattern matching (returns structured results) |
 | `stack_bench_run` | Run a specific benchmark suite with optional match pattern |
 
@@ -59,7 +53,7 @@ When prompted to perform an operation:
 - `stack_test_run` is only for requests that already name a specific test suite or need a match pattern within a known suite.
 - `stack_bench` is the default for requests like "run benchmarks".
 - `stack_bench_run` is only for requests that already name a specific benchmark suite or match pattern.
-- `stack_clean` and `stack_purge` are destructive cleanup actions; only use them when the caller explicitly requests cleanup.
+- `stack_clean` with `purge: true` is a destructive full cleanup; only use when the caller explicitly requests cleanup.
 
 Discovery requests such as listing suites or test cases belong to **@stack-discovery**, not this agent.
 
@@ -74,7 +68,7 @@ Discovery requests such as listing suites or test cases belong to **@stack-disco
 ## Common Flag Patterns
 
 - Fast development: `stack_build` with `fast: true`
-- Typecheck only: `stack_typecheck` for fast error checking without linking
+- Typecheck only: `stack_build` with `fast: true` and `no_link: true` for fast error checking without linking
 - CI builds: `stack_build` with `pedantic: true`
 - Watch mode: use `task_exec` (via @stack-tasks) with `command: "stack build --file-watch"` for long-running watch
 - Test with coverage: `stack_test` with `coverage: true`

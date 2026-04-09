@@ -19,8 +19,6 @@ tools =
   , stackInstallDef
   , stackRunDef
   , stackCleanDef
-  , stackPurgeDef
-  , stackTypecheckDef
   ]
 
 dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
@@ -32,8 +30,6 @@ dispatch mcwd name params = case name of
   "stack_install" -> Just $ callStackInstall mcwd params
   "stack_run"     -> Just $ callStackRun mcwd params
   "stack_clean"   -> Just $ callStackClean mcwd params
-  "stack_purge"      -> Just $ callStackPurge mcwd
-  "stack_typecheck"  -> Just $ callStackTypecheck mcwd params
   _                  -> Nothing
 
 ------------------------------------------------------------------------
@@ -47,7 +43,7 @@ stackBuildDef = ToolDef "stack_build"
     [ ("targets", strProp "Space-separated build targets (e.g. package:lib, package:exe:name).")
     , ("fast", boolProp "Disable optimizations for faster compile (--fast).")
     , ("pedantic", boolProp "Enable -Wall -Werror (--pedantic).")
-    , ("no_link", boolProp "Type-check only, skip code generation (-fno-code). Prefer stack_typecheck for the fix loop (auto-adds --fast).")
+    , ("no_link", boolProp "Type-check only, skip code generation (-fno-code). Combine with fast=true for a quick typecheck-only loop.")
     , ("file_watch", boolProp "Watch for file changes and rebuild (--file-watch). NOTE: long-running — use task_exec for background watch mode.")
     , ("ghc_options", strProp "Additional GHC options (e.g. \"-O2 -fprof-auto\").")
     , ("flags", strProp "Additional raw flags to pass to stack build.")
@@ -116,27 +112,12 @@ stackRunDef = ToolDef "stack_run"
 
 stackCleanDef :: ToolDef
 stackCleanDef = ToolDef "stack_clean"
-  "Delete build artifacts for project packages only. \
-  \For a full reset including all .stack-work directories, use stack_purge instead." $
+  "Delete build artifacts. By default removes project packages only. \
+  \Use full=true for the entire .stack-work directory, or purge=true for a \
+  \full reset including all working directories and snapshots." $
   mkSchema
     [ ("full", boolProp "Delete the entire .stack-work directory (--full).")
-    ] []
-
-stackPurgeDef :: ToolDef
-stackPurgeDef = ToolDef "stack_purge"
-  "Delete all project Stack working directories (.stack-work). \
-  \More aggressive than stack_clean — removes everything including snapshots." $
-  mkSchema [] []
-
-stackTypecheckDef :: ToolDef
-stackTypecheckDef = ToolDef "stack_typecheck"
-  "Fast typecheck: build with --fast -fno-code. Skips optimizations and code generation \
-  \for the fastest possible feedback on type errors. Ideal for the build-fix loop." $
-  mkSchema
-    [ ("targets", strProp "Space-separated build targets.")
-    , ("ghc_options", strProp "Additional GHC options.")
-    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
-    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
+    , ("purge", boolProp "Delete all .stack-work directories including snapshots (runs stack purge). Overrides full.")
     ] []
 
 ------------------------------------------------------------------------
@@ -279,28 +260,11 @@ callStackRun mcwd params = do
 
 callStackClean :: Maybe FilePath -> Value -> IO ToolResult
 callStackClean mcwd params = do
-  let full = getParamBool "full" params
-      args = ["clean"] ++ ["--full" | full]
+  let purge = getParamBool "purge" params
+      full  = getParamBool "full" params
+      args | purge     = ["purge"]
+           | otherwise = ["clean"] ++ ["--full" | full]
   so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["output" .= soStdout so]
     _ -> mkCommandError args so
-
-callStackPurge :: Maybe FilePath -> IO ToolResult
-callStackPurge mcwd = do
-  so <- runStackBuild mcwd ["purge"]
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
-    _ -> mkCommandError ["purge"] so
-
-callStackTypecheck :: Maybe FilePath -> Value -> IO ToolResult
-callStackTypecheck mcwd params = do
-  let targets = T.words (getParamText "targets" params)
-      ghcOpts = getParamText "ghc_options" params
-      inclW   = getParamBool "include_warnings" params
-      inclO   = getParamBool "include_output" params
-      args = ["build"] ++ targets
-          ++ ["--fast"]
-          ++ ["--ghc-options", "-fno-code"]
-          ++ ["--ghc-options" | not (T.null ghcOpts)] ++ [ghcOpts | not (T.null ghcOpts)]
-  structuredBuild mcwd inclW inclO args

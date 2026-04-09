@@ -5,12 +5,8 @@ tools:
   - stack_mcp/set_repo
   - stack_mcp/get_repo
   - stack_mcp/stack_path
-  - stack_mcp/stack_query
   - stack_mcp/stack_ls_tools
-  - stack_mcp/stack_ls_stack_colors
-  - stack_mcp/stack_ide_targets
-  - stack_mcp/stack_ide_packages
-  - stack_mcp/stack_uninstall
+  - stack_mcp/stack_ide_info
   - stack_mcp/stack_upgrade
 ---
 
@@ -37,21 +33,17 @@ When prompted to perform an operation:
 |---|---|
 | `set_repo` / `get_repo` | Manage working directory |
 | `stack_path` | Print path info: project-root, local-bin, dist-dir, ghc-paths, stack-root, etc. |
-| `stack_query` | Query build metadata: compiler version, local packages, etc. |
 | `stack_ls_tools` | List tools installed by Stack |
-| `stack_ls_stack_colors` | List Stack's output style names and SGR codes |
-| `stack_ide_targets` | List build targets for IDE integration (--exes, --tests, --benchmarks) |
-| `stack_ide_packages` | List all locally loadable packages |
-| `stack_uninstall` | Show instructions for uninstalling Stack or Stack-supplied tools |
+| `stack_ide_info` | Query IDE information: targets (--exes, --tests, --benchmarks) or packages (type="packages") |
 | `stack_upgrade` | Upgrade Stack to the latest version (--binary-only for binary download) |
 
 ## Tool Selection
 
 - `stack_path` returns filesystem locations.
 - `stack_query` returns compiler and package metadata.
-- `stack_ls_tools` and `stack_ls_stack_colors` return Stack environment information.
-- `stack_ide_targets` and `stack_ide_packages` return IDE-facing package and target info.
-- `stack_uninstall` and `stack_upgrade` manage Stack itself.
+- `stack_ls_tools` returns Stack environment information.
+- `stack_ide_info` returns IDE-facing package and target info (use `type: "packages"` or `type: "targets"`).
+- `stack_upgrade` manages Stack itself.
 
 Do not call more than one info tool unless the caller explicitly asked for a combined report.
 

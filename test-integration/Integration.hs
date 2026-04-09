@@ -140,15 +140,16 @@ happyPathTests = testCaseSteps "happy path" $ \step ->
     assertBool "project-root contains myapp" $
       T.isInfixOf "myapp" (resultText r9)
 
-    step "stack_ide_targets"
-    r11 <- call cwdRef tm "stack_ide_targets" emptyParams
-    assertSuccess "stack_ide_targets" r11
-    assertBool "ide_targets mentions myapp" $
+    step "stack_ide_info (targets)"
+    r11 <- call cwdRef tm "stack_ide_info" emptyParams
+    assertSuccess "stack_ide_info" r11
+    assertBool "ide_info mentions myapp" $
       T.isInfixOf "myapp" (resultText r11)
 
-    step "stack_ide_packages"
-    r12 <- call cwdRef tm "stack_ide_packages" emptyParams
-    assertSuccess "stack_ide_packages" r12
+    step "stack_ide_info (packages)"
+    r12 <- call cwdRef tm "stack_ide_info"
+             (params [("type", String "packages")])
+    assertSuccess "stack_ide_info packages" r12
 
     -- == Config ==
     step "stack_config_read (stack.yaml)"
@@ -416,40 +417,40 @@ editToolsTests = testCaseSteps "edit tools" $ \step ->
     writeIORef cwdRef (Just projDir)
 
     -- == Dependencies ==
-    step "project_add_dependency (aeson)"
-    r2 <- call cwdRef tm "project_add_dependency"
-            (params [("package", String "aeson")])
+    step "project_dependency add (aeson)"
+    r2 <- call cwdRef tm "project_dependency"
+            (params [("action", String "add"), ("package", String "aeson")])
     assertSuccess "add dep aeson" r2
     assertBool "reports added" $ T.isInfixOf "added" (resultText r2)
 
-    step "project_add_dependency (duplicate)"
-    r3 <- call cwdRef tm "project_add_dependency"
-            (params [("package", String "aeson")])
+    step "project_dependency add (duplicate)"
+    r3 <- call cwdRef tm "project_dependency"
+            (params [("action", String "add"), ("package", String "aeson")])
     assertSuccess "add dep duplicate" r3
     assertBool "reports already_present" $ T.isInfixOf "already_present" (resultText r3)
 
-    step "project_add_dependency (library section)"
-    r3b <- call cwdRef tm "project_add_dependency"
-             (params [("package", String "containers"), ("section", String "library")])
+    step "project_dependency add (library section)"
+    r3b <- call cwdRef tm "project_dependency"
+             (params [("action", String "add"), ("package", String "containers"), ("section", String "library")])
     assertSuccess "add dep to library" r3b
     assertBool "reports added to library" $
       T.isInfixOf "added" (resultText r3b) && T.isInfixOf "library" (resultText r3b)
 
-    step "project_remove_dependency (aeson)"
-    r4 <- call cwdRef tm "project_remove_dependency"
-            (params [("package", String "aeson")])
+    step "project_dependency remove (aeson)"
+    r4 <- call cwdRef tm "project_dependency"
+            (params [("action", String "remove"), ("package", String "aeson")])
     assertSuccess "remove dep aeson" r4
     assertBool "reports removed" $ T.isInfixOf "removed" (resultText r4)
 
-    step "project_remove_dependency (nonexistent)"
-    r5 <- call cwdRef tm "project_remove_dependency"
-            (params [("package", String "doesnotexist999")])
+    step "project_dependency remove (nonexistent)"
+    r5 <- call cwdRef tm "project_dependency"
+            (params [("action", String "remove"), ("package", String "doesnotexist999")])
     assertSuccess "remove nonexistent" r5  -- returns success:false, not an error
     assertBool "reports not found" $ T.isInfixOf "not found" (T.toLower (resultText r5))
 
-    step "project_remove_dependency (library section)"
-    r5b <- call cwdRef tm "project_remove_dependency"
-             (params [("package", String "containers"), ("section", String "library")])
+    step "project_dependency remove (library section)"
+    r5b <- call cwdRef tm "project_dependency"
+             (params [("action", String "remove"), ("package", String "containers"), ("section", String "library")])
     assertSuccess "remove dep from library" r5b
     assertBool "reports removed from library" $
       T.isInfixOf "removed" (resultText r5b) && T.isInfixOf "library" (resultText r5b)
@@ -587,27 +588,27 @@ editToolsTests = testCaseSteps "edit tools" $ \step ->
     assertBool "Deep/ directory should be removed after rename" (not deepExists)
 
     -- == Extra Deps ==
-    step "project_add_extra_dep (acme-missiles-0.3)"
-    rEd1 <- call cwdRef tm "project_add_extra_dep"
-              (params [("package", String "acme-missiles-0.3")])
+    step "project_extra_dep add (acme-missiles-0.3)"
+    rEd1 <- call cwdRef tm "project_extra_dep"
+              (params [("action", String "add"), ("package", String "acme-missiles-0.3")])
     assertSuccess "add extra dep" rEd1
     assertBool "reports added" $ T.isInfixOf "added" (T.toLower (resultText rEd1))
 
-    step "project_add_extra_dep (duplicate)"
-    rEd2 <- call cwdRef tm "project_add_extra_dep"
-              (params [("package", String "acme-missiles-0.3")])
+    step "project_extra_dep add (duplicate)"
+    rEd2 <- call cwdRef tm "project_extra_dep"
+              (params [("action", String "add"), ("package", String "acme-missiles-0.3")])
     assertSuccess "add extra dep dup" rEd2
     assertBool "reports already present" $ T.isInfixOf "already" (T.toLower (resultText rEd2))
 
-    step "project_remove_extra_dep (acme-missiles)"
-    rEd3 <- call cwdRef tm "project_remove_extra_dep"
-              (params [("package", String "acme-missiles")])
+    step "project_extra_dep remove (acme-missiles)"
+    rEd3 <- call cwdRef tm "project_extra_dep"
+              (params [("action", String "remove"), ("package", String "acme-missiles")])
     assertSuccess "remove extra dep" rEd3
     assertBool "reports removed" $ T.isInfixOf "removed" (T.toLower (resultText rEd3))
 
-    step "project_remove_extra_dep (nonexistent)"
-    rEd4 <- call cwdRef tm "project_remove_extra_dep"
-              (params [("package", String "doesnotexist999")])
+    step "project_extra_dep remove (nonexistent)"
+    rEd4 <- call cwdRef tm "project_extra_dep"
+              (params [("action", String "remove"), ("package", String "doesnotexist999")])
     assertSuccess "remove nonexistent extra dep" rEd4
     assertBool "reports not found" $
       T.isInfixOf "not found" (T.toLower (resultText rEd4)) ||
@@ -625,25 +626,25 @@ editToolsTests = testCaseSteps "edit tools" $ \step ->
     assertSuccess "clear ghc-options" rGo2
 
     -- == Default Extensions ==
-    step "project_add_default_extension (LambdaCase)"
-    rDe1 <- call cwdRef tm "project_add_default_extension"
-              (params [("extension", String "LambdaCase")])
+    step "project_extension add (LambdaCase)"
+    rDe1 <- call cwdRef tm "project_extension"
+              (params [("action", String "add"), ("extension", String "LambdaCase")])
     assertSuccess "add default ext" rDe1
 
-    step "project_add_default_extension (duplicate)"
-    rDe2 <- call cwdRef tm "project_add_default_extension"
-              (params [("extension", String "LambdaCase")])
+    step "project_extension add (duplicate)"
+    rDe2 <- call cwdRef tm "project_extension"
+              (params [("action", String "add"), ("extension", String "LambdaCase")])
     assertSuccess "add default ext dup" rDe2
     assertBool "reports already present" $ T.isInfixOf "already" (T.toLower (resultText rDe2))
 
-    step "project_remove_default_extension (LambdaCase)"
-    rDe3 <- call cwdRef tm "project_remove_default_extension"
-              (params [("extension", String "LambdaCase")])
+    step "project_extension remove (LambdaCase)"
+    rDe3 <- call cwdRef tm "project_extension"
+              (params [("action", String "remove"), ("extension", String "LambdaCase")])
     assertSuccess "remove default ext" rDe3
 
-    step "project_remove_default_extension (nonexistent)"
-    rDe4 <- call cwdRef tm "project_remove_default_extension"
-              (params [("extension", String "NoSuchExtension")])
+    step "project_extension remove (nonexistent)"
+    rDe4 <- call cwdRef tm "project_extension"
+              (params [("action", String "remove"), ("extension", String "NoSuchExtension")])
     assertSuccess "remove nonexistent ext" rDe4
     assertBool "reports not found" $
       T.isInfixOf "not found" (T.toLower (resultText rDe4)) ||

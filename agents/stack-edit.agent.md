@@ -4,18 +4,15 @@ user-invocable: false
 tools:
   - stack_mcp/set_repo
   - stack_mcp/get_repo
-  - stack_mcp/project_add_dependency
-  - stack_mcp/project_remove_dependency
+  - stack_mcp/project_dependency
   - stack_mcp/project_add_module
   - stack_mcp/project_expose_module
   - stack_mcp/project_rename_module
   - stack_mcp/project_remove_module
   - stack_mcp/project_list_modules
-  - stack_mcp/project_add_extra_dep
-  - stack_mcp/project_remove_extra_dep
+  - stack_mcp/project_extra_dep
   - stack_mcp/project_set_ghc_options
-  - stack_mcp/project_add_default_extension
-  - stack_mcp/project_remove_default_extension
+  - stack_mcp/project_extension
   - stack_mcp/project_add_component
   - stack_mcp/project_resolve_module
 ---
@@ -42,28 +39,25 @@ When prompted to perform an operation:
 | Tool | Purpose |
 |---|---|
 | `set_repo` / `get_repo` | Manage working directory |
-| `project_add_dependency` | Add a package to dependencies in package.yaml (supports `section: "library"`) |
-| `project_remove_dependency` | Remove a package from dependencies (supports `section: "library"`) |
+| `project_dependency` | Add or remove a package dependency in package.yaml (action: "add"/"remove", supports section: "library") |
 | `project_add_module` | Create a new Haskell module file (supports `source_dir` for app/test) |
 | `project_expose_module` | Add a module to exposed-modules in package.yaml |
 | `project_rename_module` | Rename a module, move file, rewrite imports, update exposed-modules |
 | `project_remove_module` | Delete a module file, update exposed-modules, warn about dangling imports |
 | `project_list_modules` | List all modules by source directory |
-| `project_add_extra_dep` | Add a package to extra-deps in stack.yaml (for deps outside the snapshot) |
-| `project_remove_extra_dep` | Remove a package from extra-deps in stack.yaml |
+| `project_extra_dep` | Add or remove a package in extra-deps in stack.yaml (action: "add"/"remove") |
 | `project_set_ghc_options` | Set/update/remove ghc-options in package.yaml (top-level or per-section) |
-| `project_add_default_extension` | Add a GHC extension to default-extensions in package.yaml |
-| `project_remove_default_extension` | Remove a GHC extension from default-extensions |
+| `project_extension` | Add or remove a GHC extension in default-extensions (action: "add"/"remove") |
 | `project_add_component` | Add a new executable, test-suite, or benchmark to package.yaml |
 | `project_resolve_module` | Resolve a module name to its absolute file path |
 
 ## Tool Selection
 
-- `project_add_dependency` and `project_remove_dependency` edit package dependencies.
+- `project_dependency` with `action: "add"` or `action: "remove"` manages package dependencies.
 - `project_add_module`, `project_expose_module`, `project_rename_module`, and `project_remove_module` manage modules.
 - `project_list_modules` and `project_resolve_module` inspect module layout.
-- `project_add_extra_dep` and `project_remove_extra_dep` edit `extra-deps`.
-- `project_set_ghc_options`, `project_add_default_extension`, and `project_remove_default_extension` edit compiler defaults.
+- `project_extra_dep` with `action: "add"` or `action: "remove"` manages `extra-deps`.
+- `project_set_ghc_options` and `project_extension` edit compiler defaults.
 - `project_add_component` adds executables, tests, or benchmarks.
 
 If the caller also wants config inspection or build verification, that is a separate step for the orchestrator to route explicitly. Do not do it automatically here.

@@ -13,8 +13,7 @@ tools :: [ToolDef]
 tools =
   [ stackPathDef
   , stackLsToolsDef
-  , stackIdeTargetsDef
-  , stackIdePackagesDef
+  , stackIdeInfoDef
   , stackUpgradeDef
   ]
 
@@ -22,8 +21,7 @@ dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
 dispatch mcwd name params = case name of
   "stack_path"        -> Just $ callStackPath mcwd params
   "stack_ls_tools"    -> Just $ callStackLsTools mcwd
-  "stack_ide_targets" -> Just $ callStackIdeTargets mcwd params
-  "stack_ide_packages" -> Just $ callStackIdePackages mcwd
+  "stack_ide_info"   -> Just $ callStackIdeInfo mcwd params
   "stack_upgrade"     -> Just $ callStackUpgrade mcwd params
   _                   -> Nothing
 
@@ -52,19 +50,16 @@ stackLsToolsDef = ToolDef "stack_ls_tools"
   "List tools installed by Stack." $
   mkSchema [] []
 
-stackIdeTargetsDef :: ToolDef
-stackIdeTargetsDef = ToolDef "stack_ide_targets"
-  "List the project's build targets. Useful for IDE integration and discovering component names." $
+stackIdeInfoDef :: ToolDef
+stackIdeInfoDef = ToolDef "stack_ide_info"
+  "Query IDE information. Use type='targets' to list build targets (default), \
+  \or type='packages' to list local loadable packages." $
   mkSchema
-    [ ("exes", boolProp "Include executables (--exes).")
-    , ("tests", boolProp "Include test suites (--tests).")
-    , ("benchmarks", boolProp "Include benchmarks (--benchmarks).")
+    [ ("type", enumProp "What to query." ["targets", "packages"])
+    , ("exes", boolProp "Include executables (--exes). Only for type=targets.")
+    , ("tests", boolProp "Include test suites (--tests). Only for type=targets.")
+    , ("benchmarks", boolProp "Include benchmarks (--benchmarks). Only for type=targets.")
     ] []
-
-stackIdePackagesDef :: ToolDef
-stackIdePackagesDef = ToolDef "stack_ide_packages"
-  "List all available local loadable packages." $
-  mkSchema [] []
 
 stackUpgradeDef :: ToolDef
 stackUpgradeDef = ToolDef "stack_upgrade"
@@ -114,34 +109,31 @@ callStackLsTools mcwd = do
       pure $ mkToolResultJSON $ object ["tools" .= ls]
     _ -> pure $ mkCommandError ["ls", "tools"] so
 
-callStackIdeTargets :: Maybe FilePath -> Value -> IO ToolResult
-callStackIdeTargets mcwd params = do
-  let exes    = getParamBool "exes" params
-      tests   = getParamBool "tests" params
-      benchs  = getParamBool "benchmarks" params
-      args = ["ide", "targets", "--stdout"]
-          ++ ["--exes" | exes]
-          ++ ["--tests" | tests]
-          ++ ["--benchmarks" | benchs]
-  so <- runStackRaw mcwd args
-  case soExitCode so of
-    0 -> do
-      let ls = filter (not . T.null) $ T.lines (soStdout so)
-      pure $ mkToolResultJSON $ object
-        [ "targets" .= ls
-        ]
-    _ -> pure $ mkCommandError args so
-
-callStackIdePackages :: Maybe FilePath -> IO ToolResult
-callStackIdePackages mcwd = do
-  so <- runStackRaw mcwd ["ide", "packages"]
-  case soExitCode so of
-    0 -> do
-      let ls = filter (not . T.null) $ T.lines (soStdout so)
-      pure $ mkToolResultJSON $ object
-        [ "packages" .= ls
-        ]
-    _ -> pure $ mkCommandError ["ide", "packages"] so
+callStackIdeInfo :: Maybe FilePath -> Value -> IO ToolResult
+callStackIdeInfo mcwd params = do
+  let infoType = getParamText "type" params
+  if infoType == "packages"
+    then do
+      so <- runStackRaw mcwd ["ide", "packages"]
+      case soExitCode so of
+        0 -> do
+          let ls = filter (not . T.null) $ T.lines (soStdout so)
+          pure $ mkToolResultJSON $ object ["packages" .= ls]
+        _ -> pure $ mkCommandError ["ide", "packages"] so
+    else do
+      let exes    = getParamBool "exes" params
+          tests   = getParamBool "tests" params
+          benchs  = getParamBool "benchmarks" params
+          args = ["ide", "targets", "--stdout"]
+              ++ ["--exes" | exes]
+              ++ ["--tests" | tests]
+              ++ ["--benchmarks" | benchs]
+      so <- runStackRaw mcwd args
+      case soExitCode so of
+        0 -> do
+          let ls = filter (not . T.null) $ T.lines (soStdout so)
+          pure $ mkToolResultJSON $ object ["targets" .= ls]
+        _ -> pure $ mkCommandError args so
 
 callStackUpgrade :: Maybe FilePath -> Value -> IO ToolResult
 callStackUpgrade mcwd params = do

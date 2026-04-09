@@ -30,8 +30,8 @@ import StackMCP.Tools.Edit qualified as Edit
 
 tests :: TestTree
 tests = testGroup "ToolDefs"
-  [ testCase "total tool count is 56" $
-      length allTools @?= 56
+  [ testCase "total tool count is 50" $
+      length allTools @?= 50
 
   , testCase "all tool names are unique" $ do
       let names = map toolName allTools
@@ -56,7 +56,7 @@ tests = testGroup "ToolDefs"
         [ "set_repo", "get_repo"
         -- Build
         , "stack_build", "stack_test", "stack_bench"
-        , "stack_run", "stack_clean", "stack_purge"
+        , "stack_run", "stack_clean"
         , "stack_haddock", "stack_install"
         -- Project
         , "stack_new", "stack_init", "stack_setup"
@@ -72,7 +72,7 @@ tests = testGroup "ToolDefs"
         -- Info
         , "stack_path"
         , "stack_ls_tools"
-        , "stack_ide_targets", "stack_ide_packages"
+        , "stack_ide_info"
         , "stack_upgrade"
         -- Testing
         , "stack_test_discover", "stack_test_run"
@@ -83,26 +83,22 @@ tests = testGroup "ToolDefs"
         , "task_run", "task_exec", "task_ghci", "task_ghci_eval"
         , "task_read", "task_write", "task_kill", "task_list"
         -- Edit
-        , "project_add_dependency", "project_remove_dependency"
+        , "project_dependency"
         , "project_add_module", "project_expose_module"
         , "project_rename_module", "project_list_modules"
-        -- Build (newer)
-        , "stack_typecheck"
-        -- Edit (newer)
         , "project_remove_module"
-        , "project_add_extra_dep", "project_remove_extra_dep"
+        , "project_extra_dep"
         , "project_set_ghc_options"
-        , "project_add_default_extension", "project_remove_default_extension"
+        , "project_extension"
         , "project_add_component", "project_resolve_module"
         ]
 
-  , testCase "known tools list is exhaustive (covers all 56)" $ do
+  , testCase "known tools list is exhaustive (covers all 50)" $ do
       let known = sort
             [ "set_repo", "get_repo"
             , "stack_build", "stack_test", "stack_bench"
-            , "stack_run", "stack_clean", "stack_purge"
+            , "stack_run", "stack_clean"
             , "stack_haddock", "stack_install"
-            , "stack_typecheck"
             , "stack_new", "stack_init", "stack_setup"
             , "stack_config_set"
             , "stack_ls_dependencies"
@@ -113,7 +109,7 @@ tests = testGroup "ToolDefs"
             , "stack_hoogle"
             , "stack_path"
             , "stack_ls_tools"
-            , "stack_ide_targets", "stack_ide_packages"
+            , "stack_ide_info"
             , "stack_upgrade"
             , "stack_test_discover", "stack_test_run"
             , "stack_bench_discover", "stack_bench_run"
@@ -121,13 +117,13 @@ tests = testGroup "ToolDefs"
             , "task_run", "task_exec", "task_ghci", "task_ghci_eval"
             , "task_read", "task_write", "task_kill", "task_list"
             -- Edit
-            , "project_add_dependency", "project_remove_dependency"
+            , "project_dependency"
             , "project_add_module", "project_expose_module"
             , "project_rename_module", "project_list_modules"
             , "project_remove_module"
-            , "project_add_extra_dep", "project_remove_extra_dep"
+            , "project_extra_dep"
             , "project_set_ghc_options"
-            , "project_add_default_extension", "project_remove_default_extension"
+            , "project_extension"
             , "project_add_component", "project_resolve_module"
             ] :: [Text]
           actual = sort (map toolName allTools)

@@ -22,36 +22,30 @@ import StackMCP.Types (ContentBlock(..), ToolResult(..))
 
 tools :: [ToolDef]
 tools =
-  [ projectAddDepDef
-  , projectRemoveDepDef
+  [ projectDependencyDef
   , projectAddModuleDef
   , projectExposeModuleDef
   , projectRenameModuleDef
   , projectListModulesDef
   , projectRemoveModuleDef
-  , projectAddExtraDepDef
-  , projectRemoveExtraDepDef
+  , projectExtraDepDef
   , projectSetGhcOptionsDef
-  , projectAddDefaultExtDef
-  , projectRemoveDefaultExtDef
+  , projectExtensionDef
   , projectAddComponentDef
   , projectResolveModuleDef
   ]
 
 dispatch :: IORef (Maybe FilePath) -> Text -> Value -> Maybe (IO ToolResult)
 dispatch cwdRef name params = case name of
-  "project_add_dependency"       -> Just $ withReturnContent cwdRef params (callAddDep params)
-  "project_remove_dependency"    -> Just $ withReturnContent cwdRef params (callRemoveDep params)
+  "project_dependency"             -> Just $ withReturnContent cwdRef params (callDependency params)
   "project_add_module"           -> Just $ withReturnContent cwdRef params (callAddModule params)
   "project_expose_module"        -> Just $ withReturnContent cwdRef params (callExposeModule params)
   "project_rename_module"        -> Just $ withReturnContent cwdRef params (callRenameModule params)
   "project_list_modules"         -> Just $ withDir cwdRef (callListModules params)
   "project_remove_module"        -> Just $ withReturnContent cwdRef params (callRemoveModule params)
-  "project_add_extra_dep"        -> Just $ withReturnContent cwdRef params (callAddExtraDep params)
-  "project_remove_extra_dep"     -> Just $ withReturnContent cwdRef params (callRemoveExtraDep params)
+  "project_extra_dep"            -> Just $ withReturnContent cwdRef params (callExtraDep params)
   "project_set_ghc_options"      -> Just $ withReturnContent cwdRef params (callSetGhcOptions params)
-  "project_add_default_extension"    -> Just $ withReturnContent cwdRef params (callAddDefaultExt params)
-  "project_remove_default_extension" -> Just $ withReturnContent cwdRef params (callRemoveDefaultExt params)
+  "project_extension"            -> Just $ withReturnContent cwdRef params (callExtension params)
   "project_add_component"        -> Just $ withReturnContent cwdRef params (callAddComponent params)
   "project_resolve_module"       -> Just $ withDir cwdRef (callResolveModule params)
   _                               -> Nothing
@@ -110,30 +104,18 @@ mkEditSchema props req = mkSchema
   (props ++ [("return_content", boolProp "If true, include the modified package.yaml and stack.yaml content in the response.")])
   req
 
-projectAddDepDef :: ToolDef
-projectAddDepDef = ToolDef "project_add_dependency"
-  "Add a package dependency to the project's package.yaml. \
+projectDependencyDef :: ToolDef
+projectDependencyDef = ToolDef "project_dependency"
+  "Add or remove a package dependency in the project's package.yaml. \
   \Defaults to the top-level 'dependencies' list (shared by all components). \
-  \Use section='library' to add a library-specific dependency. \
-  \If already present, reports without duplicating." $
+  \Use section='library' to target library-specific dependencies." $
   mkEditSchema
-    [ ("package", strProp "Package name (e.g. \"aeson\", \"text >= 2.0\").")
+    [ ("action", enumProp "Whether to add or remove the dependency." ["add", "remove"])
+    , ("package", strProp "Package name (e.g. \"aeson\", \"text >= 2.0\"). For remove, matched by prefix.")
     , ("section", enumProp
-        "Which section to add the dependency to. Defaults to top-level 'dependencies'."
+        "Which section to target. Defaults to top-level 'dependencies'."
         ["dependencies", "library"])
-    ] ["package"]
-
-projectRemoveDepDef :: ToolDef
-projectRemoveDepDef = ToolDef "project_remove_dependency"
-  "Remove a package dependency from the project's package.yaml. \
-  \Defaults to removing from the top-level 'dependencies' list. \
-  \Use section='library' to remove from the library-specific dependencies." $
-  mkEditSchema
-    [ ("package", strProp "Package name to remove (matched by prefix, e.g. \"aeson\" matches \"aeson >= 2.0\").")
-    , ("section", enumProp
-        "Which section to remove from. Defaults to top-level 'dependencies'."
-        ["dependencies", "library"])
-    ] ["package"]
+    ] ["action", "package"]
 
 projectAddModuleDef :: ToolDef
 projectAddModuleDef = ToolDef "project_add_module"
@@ -187,20 +169,14 @@ projectRemoveModuleDef = ToolDef "project_remove_module"
     , ("source_dir", strProp "Source directory the module is in (e.g. \"src\", \"app\"). If omitted, searches all source dirs.")
     ] ["module_name"]
 
-projectAddExtraDepDef :: ToolDef
-projectAddExtraDepDef = ToolDef "project_add_extra_dep"
-  "Add a package to extra-deps in stack.yaml. Used when a dependency isn't in the snapshot. \
-  \Accepts package-version format (e.g. \"acme-missiles-0.3\") or git references." $
+projectExtraDepDef :: ToolDef
+projectExtraDepDef = ToolDef "project_extra_dep"
+  "Add or remove a package in extra-deps in stack.yaml. \
+  \Used when a dependency isn't in the snapshot." $
   mkEditSchema
-    [ ("package", strProp "Package spec to add (e.g. \"acme-missiles-0.3\", \"foo-1.2.3@sha256:abc...\").")
-    ] ["package"]
-
-projectRemoveExtraDepDef :: ToolDef
-projectRemoveExtraDepDef = ToolDef "project_remove_extra_dep"
-  "Remove a package from extra-deps in stack.yaml. Matches by package name prefix." $
-  mkEditSchema
-    [ ("package", strProp "Package name or name-version to remove (e.g. \"acme-missiles\" or \"acme-missiles-0.3\").")
-    ] ["package"]
+    [ ("action", enumProp "Whether to add or remove the extra dep." ["add", "remove"])
+    , ("package", strProp "Package spec (e.g. \"acme-missiles-0.3\"). For remove, matched by name prefix.")
+    ] ["action", "package"]
 
 projectSetGhcOptionsDef :: ToolDef
 projectSetGhcOptionsDef = ToolDef "project_set_ghc_options"
@@ -213,20 +189,13 @@ projectSetGhcOptionsDef = ToolDef "project_set_ghc_options"
         ["top-level", "library", "executables", "tests"])
     ] ["options"]
 
-projectAddDefaultExtDef :: ToolDef
-projectAddDefaultExtDef = ToolDef "project_add_default_extension"
-  "Add a GHC language extension to default-extensions in package.yaml. \
-  \Adds to the top-level default-extensions list (shared by all components)." $
+projectExtensionDef :: ToolDef
+projectExtensionDef = ToolDef "project_extension"
+  "Add or remove a GHC language extension in default-extensions in package.yaml." $
   mkEditSchema
-    [ ("extension", strProp "Extension name (e.g. \"OverloadedStrings\", \"LambdaCase\").")
-    ] ["extension"]
-
-projectRemoveDefaultExtDef :: ToolDef
-projectRemoveDefaultExtDef = ToolDef "project_remove_default_extension"
-  "Remove a GHC language extension from default-extensions in package.yaml." $
-  mkEditSchema
-    [ ("extension", strProp "Extension name to remove (e.g. \"OverloadedStrings\").")
-    ] ["extension"]
+    [ ("action", enumProp "Whether to add or remove the extension." ["add", "remove"])
+    , ("extension", strProp "Extension name (e.g. \"OverloadedStrings\", \"LambdaCase\").")
+    ] ["action", "extension"]
 
 projectAddComponentDef :: ToolDef
 projectAddComponentDef = ToolDef "project_add_component"
@@ -308,6 +277,14 @@ listIndent keyIdx lns =
 ------------------------------------------------------------------------
 -- Implementations
 ------------------------------------------------------------------------
+
+-- | Route dependency action to add or remove.
+callDependency :: Value -> FilePath -> IO ToolResult
+callDependency params dir = do
+  let action = getParamText "action" params
+  case action of
+    "remove" -> callRemoveDep params dir
+    _        -> callAddDep params dir
 
 -- | Add a dependency to package.yaml.
 callAddDep :: Value -> FilePath -> IO ToolResult
@@ -1078,6 +1055,14 @@ findImporters modName files = do
 ------------------------------------------------------------------------
 
 -- | Add a package to extra-deps in stack.yaml.
+-- | Route extra-dep action to add or remove.
+callExtraDep :: Value -> FilePath -> IO ToolResult
+callExtraDep params dir = do
+  let action = getParamText "action" params
+  case action of
+    "remove" -> callRemoveExtraDep params dir
+    _        -> callAddExtraDep params dir
+
 callAddExtraDep :: Value -> FilePath -> IO ToolResult
 callAddExtraDep params dir = do
   let pkg = T.strip $ getParamText "package" params
@@ -1303,6 +1288,14 @@ setGhcOptionsInSection lns sectionKey opts dir =
 ------------------------------------------------------------------------
 
 -- | Add a default extension to package.yaml.
+-- | Route extension action to add or remove.
+callExtension :: Value -> FilePath -> IO ToolResult
+callExtension params dir = do
+  let action = getParamText "action" params
+  case action of
+    "remove" -> callRemoveDefaultExt params dir
+    _        -> callAddDefaultExt params dir
+
 callAddDefaultExt :: Value -> FilePath -> IO ToolResult
 callAddDefaultExt params dir = do
   let ext = T.strip $ getParamText "extension" params
