@@ -73,6 +73,7 @@ main = defaultMain $ sequentialTestGroup "Integration Tests" AllFinish
   [ happyPathTests
   , errorDiagnosticTests
   , testFailureTests
+  , testRunParsingTests
   , editToolsTests
   ]
 
@@ -313,6 +314,94 @@ testFailureTests = testCaseSteps "test failure parsing" $ \step ->
     let txt4 = resultText r4
     assertBool "raw_output present when requested" $
       T.isInfixOf "raw_output" txt4 || T.isInfixOf "output" txt4
+
+------------------------------------------------------------------------
+-- Test/Bench run parsing: exercise stack_test_run and stack_bench_run
+------------------------------------------------------------------------
+
+testRunParsingTests :: TestTree
+testRunParsingTests = testCaseSteps "test/bench run parsing" $ \step ->
+  withSystemTempDirectory "stack-mcp-runparse" $ \tmpDir -> do
+    cwdRef <- newIORef (Just tmpDir)
+    tm     <- newTaskManager
+
+    step "scaffold"
+    r <- call cwdRef tm "stack_new" (params [("name", String "runapp")])
+    assertSuccess "stack_new (runapp)" r
+
+    let projDir = tmpDir </> "runapp"
+    writeIORef cwdRef (Just projDir)
+
+    step "build (should succeed first)"
+    r2 <- call cwdRef tm "stack_build" emptyParams
+    assertSuccess "initial build" r2
+
+    -- == stack_test_run with failing test ==
+    step "inject failing test"
+    let testFile = projDir </> "test" </> "Main.hs"
+    writeFile testFile $ unlines
+      [ "module Main (main) where"
+      , "import System.Exit (exitFailure)"
+      , "main :: IO ()"
+      , "main = do"
+      , "  putStrLn \"  addition:       FAIL\""
+      , "  putStrLn \"    expected: 5\""
+      , "  putStrLn \"     but got: 3\""
+      , "  exitFailure"
+      ]
+
+    step "stack_test_run (should fail with structured output)"
+    r3 <- call cwdRef tm "stack_test_run"
+            (params [("suite", String "runapp:test:runapp-test")])
+    assertIsError "stack_test_run failure" r3
+    let txt3 = resultText r3
+    assertBool "test_run has suite field" $
+      T.isInfixOf "runapp" txt3
+    -- Should have either test_failures, diagnostics, or raw_stderr fallback
+    assertBool "test_run has failure info or stderr" $
+      T.isInfixOf "test_failures" txt3
+      || T.isInfixOf "diagnostics" txt3
+      || T.isInfixOf "raw_stderr" txt3
+
+    step "stack_test_run with include_output (should include output)"
+    r4 <- call cwdRef tm "stack_test_run"
+            (params [ ("suite", String "runapp:test:runapp-test")
+                    , ("include_output", Bool True) ])
+    assertIsError "stack_test_run with output" r4
+    assertBool "test_run output present" $
+      T.isInfixOf "output" (resultText r4)
+
+    -- == Add a benchmark component and test stack_bench_run ==
+    step "add benchmark component"
+    r5 <- call cwdRef tm "project_add_component"
+            (params [ ("name", String "runapp-bench")
+                    , ("type", String "benchmark")
+                    , ("source_dir", String "bench") ])
+    assertSuccess "add benchmark" r5
+
+    step "inject failing benchmark"
+    let benchFile = projDir </> "bench" </> "Main.hs"
+    writeFile benchFile $ unlines
+      [ "module Main (main) where"
+      , "import System.Exit (exitFailure)"
+      , "main :: IO ()"
+      , "main = do"
+      , "  putStrLn \"benchmarking something\""
+      , "  putStrLn \"fatal error: benchmark failed\""
+      , "  exitFailure"
+      ]
+
+    step "stack_bench_run (should fail with stderr fallback)"
+    r6 <- call cwdRef tm "stack_bench_run"
+            (params [("suite", String "runapp:bench:runapp-bench")])
+    assertIsError "stack_bench_run failure" r6
+    let txt6 = resultText r6
+    assertBool "bench_run has suite field" $
+      T.isInfixOf "runapp" txt6
+    -- No parseable benchmark counts expected, so should get raw_stderr fallback
+    assertBool "bench_run has diagnostics or stderr fallback" $
+      T.isInfixOf "diagnostics" txt6
+      || T.isInfixOf "raw_stderr" txt6
 
 ------------------------------------------------------------------------
 -- Edit tools: deps, modules, rename, list

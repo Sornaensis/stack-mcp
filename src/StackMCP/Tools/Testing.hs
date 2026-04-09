@@ -8,6 +8,7 @@ module StackMCP.Tools.Testing
   , parseTastyCounts
   ) where
 
+import Data.Maybe (isJust)
 import Data.Text qualified as T
 import StackMCP.Tools.Common
 import StackMCP.Tools.Parse (parseTestFailures, testFailuresSummary, parseGhcDiagnostics, filteredDiagnosticsSummary, readInt)
@@ -164,13 +165,16 @@ callTestRun mcwd params = do
           failures   = parseTestFailures combined
           diags      = parseGhcDiagnostics (soStderr so)
           mDiagSummary = filteredDiagnosticsSummary inclW diags
+          counts     = parsedCounts combined
+          hasStructured = not (null failures) || not (null counts) || isJust mDiagSummary
           result     = object $
             [ "suite"   .= suite
             ] ++ ["output" .= soStdout so | inclO]
-              ++ parsedCounts combined
+              ++ counts
               ++ (if null failures then []
                   else ["test_failures" .= testFailuresSummary failures])
               ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+              ++ ["raw_stderr" .= soStderr so | not success && (inclO || not hasStructured)]
       pure $ if success
         then mkToolResultJSON result
         else mkToolErrorJSON result
@@ -208,11 +212,14 @@ callBenchRun mcwd params = do
           combined = soStdout so <> "\n" <> soStderr so
           diags    = parseGhcDiagnostics (soStderr so)
           mDiagSummary = filteredDiagnosticsSummary inclW diags
+          counts   = parsedCounts combined
+          hasStructured = not (null counts) || isJust mDiagSummary
           result   = object $
             [ "suite"   .= suite
             ] ++ ["output" .= soStdout so | inclO]
-              ++ parsedCounts combined
+              ++ counts
               ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
+              ++ ["raw_stderr" .= soStderr so | not success && (inclO || not hasStructured)]
       pure $ if success
         then mkToolResultJSON result
         else mkToolErrorJSON result
