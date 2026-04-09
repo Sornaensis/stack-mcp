@@ -30,8 +30,8 @@ import StackMCP.Tools.Edit qualified as Edit
 
 tests :: TestTree
 tests = testGroup "ToolDefs"
-  [ testCase "total tool count is 73" $
-      length allTools @?= 73
+  [ testCase "total tool count is 56" $
+      length allTools @?= 56
 
   , testCase "all tool names are unique" $ do
       let names = map toolName allTools
@@ -60,22 +60,20 @@ tests = testGroup "ToolDefs"
         , "stack_haddock", "stack_install"
         -- Project
         , "stack_new", "stack_init", "stack_setup"
-        , "stack_templates"
-        , "stack_config_set", "stack_config_env", "stack_config_build_files"
+        , "stack_config_set"
         -- Deps
-        , "stack_ls_dependencies", "stack_ls_dependencies_json", "stack_ls_dependencies_tree"
+        , "stack_ls_dependencies"
         , "stack_ls_snapshots", "stack_ls_globals"
-        , "stack_unpack", "stack_update", "stack_list"
-        , "stack_dot", "stack_sdist", "stack_upload"
+        , "stack_update"
         -- Exec
-        , "stack_exec", "stack_ghci", "stack_ghc"
-        , "stack_eval", "stack_runghc", "stack_script"
+        , "stack_exec"
+        , "stack_eval", "stack_runghc"
         , "stack_hoogle"
         -- Info
-        , "stack_path", "stack_query"
-        , "stack_ls_tools", "stack_ls_stack_colors"
+        , "stack_path"
+        , "stack_ls_tools"
         , "stack_ide_targets", "stack_ide_packages"
-        , "stack_uninstall", "stack_upgrade"
+        , "stack_upgrade"
         -- Testing
         , "stack_test_discover", "stack_test_run"
         , "stack_bench_discover", "stack_bench_run"
@@ -89,7 +87,7 @@ tests = testGroup "ToolDefs"
         , "project_add_module", "project_expose_module"
         , "project_rename_module", "project_list_modules"
         -- Build (newer)
-        , "stack_hpc_report", "stack_typecheck"
+        , "stack_typecheck"
         -- Edit (newer)
         , "project_remove_module"
         , "project_add_extra_dep", "project_remove_extra_dep"
@@ -98,27 +96,25 @@ tests = testGroup "ToolDefs"
         , "project_add_component", "project_resolve_module"
         ]
 
-  , testCase "known tools list is exhaustive (covers all 73)" $ do
+  , testCase "known tools list is exhaustive (covers all 56)" $ do
       let known = sort
             [ "set_repo", "get_repo"
             , "stack_build", "stack_test", "stack_bench"
             , "stack_run", "stack_clean", "stack_purge"
             , "stack_haddock", "stack_install"
-            , "stack_hpc_report", "stack_typecheck"
+            , "stack_typecheck"
             , "stack_new", "stack_init", "stack_setup"
-            , "stack_templates"
-            , "stack_config_set", "stack_config_env", "stack_config_build_files"
-            , "stack_ls_dependencies", "stack_ls_dependencies_json", "stack_ls_dependencies_tree"
+            , "stack_config_set"
+            , "stack_ls_dependencies"
             , "stack_ls_snapshots", "stack_ls_globals"
-            , "stack_unpack", "stack_update", "stack_list"
-            , "stack_dot", "stack_sdist", "stack_upload"
-            , "stack_exec", "stack_ghci", "stack_ghc"
-            , "stack_eval", "stack_runghc", "stack_script"
+            , "stack_update"
+            , "stack_exec"
+            , "stack_eval", "stack_runghc"
             , "stack_hoogle"
-            , "stack_path", "stack_query"
-            , "stack_ls_tools", "stack_ls_stack_colors"
+            , "stack_path"
+            , "stack_ls_tools"
             , "stack_ide_targets", "stack_ide_packages"
-            , "stack_uninstall", "stack_upgrade"
+            , "stack_upgrade"
             , "stack_test_discover", "stack_test_run"
             , "stack_bench_discover", "stack_bench_run"
             , "stack_pipeline", "stack_config_read"
@@ -195,8 +191,7 @@ tests = testGroup "ToolDefs"
 
   , testCase "depth params are integer type" $ do
       let depsTools = filter (\td -> toolName td `elem`
-            ["stack_ls_dependencies", "stack_ls_dependencies_json",
-             "stack_ls_dependencies_tree", "stack_dot"]) allTools
+            ["stack_ls_dependencies"]) allTools
       mapM_ (\td -> do
           let name = toolName td
           assertBool (T.unpack name ++ " has depth as integer")

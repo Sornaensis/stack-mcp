@@ -12,32 +12,18 @@ import StackMCP.Tools.Common
 tools :: [ToolDef]
 tools =
   [ stackLsDepsDef
-  , stackLsDepsJsonDef
-  , stackLsDepsTreeDef
   , stackLsSnapshotsDef
   , stackLsGlobalsDef
-  , stackUnpackDef
   , stackUpdateDef
-  , stackListDef
-  , stackDotDef
-  , stackSdistDef
-  , stackUploadDef
   ]
 
 dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
 dispatch mcwd name params = case name of
-  "stack_ls_dependencies"      -> Just $ callStackLsDeps mcwd params
-  "stack_ls_dependencies_json" -> Just $ callStackLsDepsJson mcwd params
-  "stack_ls_dependencies_tree" -> Just $ callStackLsDepsTree mcwd params
-  "stack_ls_snapshots"         -> Just $ callStackLsSnapshots mcwd params
-  "stack_ls_globals"           -> Just $ callStackLsGlobals mcwd
-  "stack_unpack"               -> Just $ callStackUnpack mcwd params
-  "stack_update"               -> Just $ callStackUpdate mcwd
-  "stack_list"                 -> Just $ callStackList mcwd params
-  "stack_dot"                  -> Just $ callStackDot mcwd params
-  "stack_sdist"                -> Just $ callStackSdist mcwd params
-  "stack_upload"               -> Just $ callStackUpload mcwd params
-  _                            -> Nothing
+  "stack_ls_dependencies" -> Just $ callStackLsDeps mcwd params
+  "stack_ls_snapshots"    -> Just $ callStackLsSnapshots mcwd params
+  "stack_ls_globals"      -> Just $ callStackLsGlobals mcwd
+  "stack_update"          -> Just $ callStackUpdate mcwd
+  _                       -> Nothing
 
 ------------------------------------------------------------------------
 -- Definitions
@@ -45,43 +31,19 @@ dispatch mcwd name params = case name of
 
 stackLsDepsDef :: ToolDef
 stackLsDepsDef = ToolDef "stack_ls_dependencies"
-  "List project dependencies as text (name version per line). \
-  \Returns parsed name/version pairs. For raw JSON from Stack, use stack_ls_dependencies_json. \
-  \For a visual tree, use stack_ls_dependencies_tree." $
+  "List project dependencies. Use format param to choose output style: \
+  \text (default, parsed name/version pairs), json (Stack's native JSON), \
+  \or tree (indented visual hierarchy)." $
   mkSchema
-    [ ("depth", intProp "Maximum depth of dependency tree.")
-    , ("license", boolProp "Print license instead of version (--license).")
+    [ ("format", enumProp "Output format." ["text", "json", "tree"])
+    , ("depth", intProp "Maximum depth of dependency tree.")
+    , ("license", boolProp "Print license instead of version (--license). Text and tree formats only.")
     , ("external", boolProp "Include only external dependencies (--external).")
-    , ("separator", strProp "Separator between package name and version (default: space).")
-    , ("filter", strProp "Package name or $locals to filter out (can repeat, comma-separated).")
+    , ("separator", strProp "Separator between package name and version (default: space). Text format only.")
+    , ("filter", strProp "Package name or $locals to filter out (can repeat, comma-separated). Text format only.")
     , ("prune", strProp "Comma-separated packages to prune from the tree.")
     , ("test", boolProp "Consider dependencies of test components (--test).")
     , ("bench", boolProp "Consider dependencies of benchmark components (--bench).")
-    ] []
-
-stackLsDepsJsonDef :: ToolDef
-stackLsDepsJsonDef = ToolDef "stack_ls_dependencies_json"
-  "List project dependencies as structured JSON (uses Stack's native JSON output). \
-  \Best for programmatic analysis. For a human-readable list, use stack_ls_dependencies." $
-  mkSchema
-    [ ("depth", intProp "Maximum depth of dependency tree.")
-    , ("external", boolProp "Include only external dependencies (--external).")
-    , ("prune", strProp "Comma-separated packages to prune.")
-    , ("test", boolProp "Consider test dependencies (--test).")
-    , ("bench", boolProp "Consider benchmark dependencies (--bench).")
-    ] []
-
-stackLsDepsTreeDef :: ToolDef
-stackLsDepsTreeDef = ToolDef "stack_ls_dependencies_tree"
-  "List project dependencies as an indented tree (visual format). \
-  \Best for understanding dependency hierarchy. For structured data, use stack_ls_dependencies_json." $
-  mkSchema
-    [ ("depth", intProp "Maximum depth.")
-    , ("external", boolProp "Include only external dependencies (--external).")
-    , ("license", boolProp "Print license instead of version (--license).")
-    , ("prune", strProp "Comma-separated packages to prune.")
-    , ("test", boolProp "Consider test dependencies (--test).")
-    , ("bench", boolProp "Consider benchmark dependencies (--bench).")
     ] []
 
 stackLsSnapshotsDef :: ToolDef
@@ -97,54 +59,10 @@ stackLsGlobalsDef = ToolDef "stack_ls_globals"
   "List global packages in the active GHC environment." $
   mkSchema [] []
 
-stackUnpackDef :: ToolDef
-stackUnpackDef = ToolDef "stack_unpack"
-  "Unpack one or more packages from Hackage locally." $
-  mkSchema
-    [ ("package", strProp "Package name, optionally with version (e.g. aeson-2.2.3.0).")
-    ] ["package"]
-
 stackUpdateDef :: ToolDef
 stackUpdateDef = ToolDef "stack_update"
   "Update the Hackage package index." $
   mkSchema [] []
-
-stackListDef :: ToolDef
-stackListDef = ToolDef "stack_list"
-  "List package versions from the package index or a snapshot." $
-  mkSchema
-    [ ("package", strProp "Package name pattern to search for.")
-    , ("snapshot", strProp "Snapshot to list from (e.g. lts-24.2).")
-    ] []
-
-stackDotDef :: ToolDef
-stackDotDef = ToolDef "stack_dot"
-  "Output dependency graph in Graphviz DOT format." $
-  mkSchema
-    [ ("targets", strProp "Space-separated targets.")
-    , ("external", boolProp "Include external dependencies (--external).")
-    , ("depth", intProp "Maximum depth.")
-    , ("prune", strProp "Comma-separated packages to prune.")
-    , ("flags", strProp "Additional raw flags.")
-    ] []
-
-stackSdistDef :: ToolDef
-stackSdistDef = ToolDef "stack_sdist"
-  "Create source distribution tarballs." $
-  mkSchema
-    [ ("targets", strProp "Space-separated targets.")
-    , ("flags", strProp "Additional raw flags.")
-    ] []
-
-stackUploadDef :: ToolDef
-stackUploadDef = ToolDef "stack_upload"
-  "Upload packages or documentation to Hackage." $
-  mkSchema
-    [ ("targets", strProp "Space-separated targets or tarball paths.")
-    , ("documentation", boolProp "Upload documentation instead of package (--documentation).")
-    , ("candidate", boolProp "Upload as a package candidate (--candidate).")
-    , ("flags", strProp "Additional raw flags.")
-    ] []
 
 ------------------------------------------------------------------------
 -- Implementations
@@ -169,6 +87,14 @@ depsCommon params =
 
 callStackLsDeps :: Maybe FilePath -> Value -> IO ToolResult
 callStackLsDeps mcwd params = do
+  let fmt = getParamText "format" params
+  case fmt of
+    "json" -> callLsDepsJson mcwd params
+    "tree" -> callLsDepsTree mcwd params
+    _      -> callLsDepsText mcwd params
+
+callLsDepsText :: Maybe FilePath -> Value -> IO ToolResult
+callLsDepsText mcwd params = do
   let license  = getParamBool "license" params
       sep      = getParamText "separator" params
       filt     = getParamText "filter" params
@@ -192,8 +118,8 @@ callStackLsDeps mcwd params = do
         ]
     _ -> pure $ mkCommandError args so
 
-callStackLsDepsJson :: Maybe FilePath -> Value -> IO ToolResult
-callStackLsDepsJson mcwd params = do
+callLsDepsJson :: Maybe FilePath -> Value -> IO ToolResult
+callLsDepsJson mcwd params = do
   let args = ["ls", "dependencies", "json"] ++ depsCommon params
   so <- runStackBuild mcwd args
   case soExitCode so of
@@ -206,8 +132,8 @@ callStackLsDepsJson mcwd params = do
              ]
     _ -> pure $ mkCommandError args so
 
-callStackLsDepsTree :: Maybe FilePath -> Value -> IO ToolResult
-callStackLsDepsTree mcwd params = do
+callLsDepsTree :: Maybe FilePath -> Value -> IO ToolResult
+callLsDepsTree mcwd params = do
   let license  = getParamBool "license" params
       args = ["ls", "dependencies", "tree"]
           ++ depsCommon params
@@ -245,83 +171,9 @@ callStackLsGlobals mcwd = do
       pure $ mkToolResultJSON $ object ["globals" .= parsed]
     _ -> pure $ mkCommandError ["ls", "globals"] so
 
-callStackUnpack :: Maybe FilePath -> Value -> IO ToolResult
-callStackUnpack mcwd params = do
-  let pkg = getParamText "package" params
-  if T.null pkg
-    then pure $ mkToolError "package parameter is required"
-    else do
-      let args = ["unpack", pkg]
-      so <- runStackBuild mcwd args
-      pure $ case soExitCode so of
-        0 -> mkToolResultJSON $ object
-          ["package" .= pkg, "output" .= soStdout so]
-        _ -> mkCommandError args so
-
 callStackUpdate :: Maybe FilePath -> IO ToolResult
 callStackUpdate mcwd = do
   let args = ["update"]
-  so <- runStackBuild mcwd args
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
-    _ -> mkCommandError args so
-
-callStackList :: Maybe FilePath -> Value -> IO ToolResult
-callStackList mcwd params = do
-  let pkg      = getParamText "package" params
-      snapshot = getParamText "snapshot" params
-      args = ["list"]
-          ++ [pkg | not (T.null pkg)]
-          ++ ["--snapshot" | not (T.null snapshot)] ++ [snapshot | not (T.null snapshot)]
-  so <- runStackBuild mcwd args
-  case soExitCode so of
-    0 -> do
-      let ls = filter (not . T.null) $ T.lines (soStdout so)
-      pure $ mkToolResultJSON $ object
-        [ "packages" .= ls
-        ]
-    _ -> pure $ mkCommandError args so
-
-callStackDot :: Maybe FilePath -> Value -> IO ToolResult
-callStackDot mcwd params = do
-  let targets  = T.words (getParamText "targets" params)
-      external = getParamBool "external" params
-      depth    = getParamInt "depth" params
-      prune    = getParamText "prune" params
-      flags    = T.words (getParamText "flags" params)
-      depthArg = case depth of
-        Just n  -> ["--depth", T.pack (show n)]
-        Nothing -> []
-      args = ["dot"] ++ targets
-          ++ ["--external" | external]
-          ++ depthArg
-          ++ ["--prune" | not (T.null prune)] ++ [prune | not (T.null prune)]
-          ++ flags
-  so <- runStackBuild mcwd args
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["dot" .= soStdout so, "format" .= ("graphviz" :: Text)]
-    _ -> mkCommandError args so
-
-callStackSdist :: Maybe FilePath -> Value -> IO ToolResult
-callStackSdist mcwd params = do
-  let targets = T.words (getParamText "targets" params)
-      flags   = T.words (getParamText "flags" params)
-      args    = ["sdist"] ++ targets ++ flags
-  so <- runStackBuild mcwd args
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
-    _ -> mkCommandError args so
-
-callStackUpload :: Maybe FilePath -> Value -> IO ToolResult
-callStackUpload mcwd params = do
-  let targets = T.words (getParamText "targets" params)
-      docs    = getParamBool "documentation" params
-      cand    = getParamBool "candidate" params
-      flags   = T.words (getParamText "flags" params)
-      args = ["upload"] ++ targets
-          ++ ["--documentation" | docs]
-          ++ ["--candidate" | cand]
-          ++ flags
   so <- runStackBuild mcwd args
   pure $ case soExitCode so of
     0 -> mkToolResultJSON $ object ["output" .= soStdout so]

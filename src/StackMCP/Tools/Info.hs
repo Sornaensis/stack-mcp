@@ -12,26 +12,20 @@ import StackMCP.Tools.Common
 tools :: [ToolDef]
 tools =
   [ stackPathDef
-  , stackQueryDef
   , stackLsToolsDef
-  , stackLsStackColorsDef
   , stackIdeTargetsDef
   , stackIdePackagesDef
-  , stackUninstallDef
   , stackUpgradeDef
   ]
 
 dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
 dispatch mcwd name params = case name of
-  "stack_path"            -> Just $ callStackPath mcwd params
-  "stack_query"           -> Just $ callStackQuery mcwd params
-  "stack_ls_tools"        -> Just $ callStackLsTools mcwd
-  "stack_ls_stack_colors" -> Just $ callStackLsStackColors mcwd
-  "stack_ide_targets"     -> Just $ callStackIdeTargets mcwd params
-  "stack_ide_packages"    -> Just $ callStackIdePackages mcwd
-  "stack_uninstall"       -> Just $ callStackUninstall mcwd
-  "stack_upgrade"         -> Just $ callStackUpgrade mcwd params
-  _                       -> Nothing
+  "stack_path"        -> Just $ callStackPath mcwd params
+  "stack_ls_tools"    -> Just $ callStackLsTools mcwd
+  "stack_ide_targets" -> Just $ callStackIdeTargets mcwd params
+  "stack_ide_packages" -> Just $ callStackIdePackages mcwd
+  "stack_upgrade"     -> Just $ callStackUpgrade mcwd params
+  _                   -> Nothing
 
 ------------------------------------------------------------------------
 -- Definitions
@@ -53,21 +47,9 @@ stackPathDef = ToolDef "stack_path"
         ])
     ] []
 
-stackQueryDef :: ToolDef
-stackQueryDef = ToolDef "stack_query"
-  "Query build information (compiler, locals, etc.). Returns YAML text. Experimental." $
-  mkSchema
-    [ ("selector", strProp "Query selector (e.g. compiler, locals).")
-    ] []
-
 stackLsToolsDef :: ToolDef
 stackLsToolsDef = ToolDef "stack_ls_tools"
   "List tools installed by Stack." $
-  mkSchema [] []
-
-stackLsStackColorsDef :: ToolDef
-stackLsStackColorsDef = ToolDef "stack_ls_stack_colors"
-  "List Stack's output style names and their SGR codes." $
   mkSchema [] []
 
 stackIdeTargetsDef :: ToolDef
@@ -82,11 +64,6 @@ stackIdeTargetsDef = ToolDef "stack_ide_targets"
 stackIdePackagesDef :: ToolDef
 stackIdePackagesDef = ToolDef "stack_ide_packages"
   "List all available local loadable packages." $
-  mkSchema [] []
-
-stackUninstallDef :: ToolDef
-stackUninstallDef = ToolDef "stack_uninstall"
-  "Show instructions for uninstalling Stack or a Stack-supplied tool." $
   mkSchema [] []
 
 stackUpgradeDef :: ToolDef
@@ -128,15 +105,6 @@ callStackPath mcwd params = do
                ]
         _ -> pure $ mkCommandError ["path", "--" <> key] so
 
-callStackQuery :: Maybe FilePath -> Value -> IO ToolResult
-callStackQuery mcwd params = do
-  let sel  = getParamText "selector" params
-      args = ["query"] ++ [sel | not (T.null sel)]
-  so <- runStackRaw mcwd args
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
-    _ -> mkCommandError args so
-
 callStackLsTools :: Maybe FilePath -> IO ToolResult
 callStackLsTools mcwd = do
   so <- runStackRaw mcwd ["ls", "tools"]
@@ -145,17 +113,6 @@ callStackLsTools mcwd = do
       let ls = filter (not . T.null) $ T.lines (soStdout so)
       pure $ mkToolResultJSON $ object ["tools" .= ls]
     _ -> pure $ mkCommandError ["ls", "tools"] so
-
-callStackLsStackColors :: Maybe FilePath -> IO ToolResult
-callStackLsStackColors mcwd = do
-  so <- runStackRaw mcwd ["ls", "stack-colors"]
-  case soExitCode so of
-    0 -> do
-      let ls = filter (not . T.null) $ T.lines (soStdout so)
-      pure $ mkToolResultJSON $ object
-        [ "colors" .= ls
-        ]
-    _ -> pure $ mkCommandError ["ls", "stack-colors"] so
 
 callStackIdeTargets :: Maybe FilePath -> Value -> IO ToolResult
 callStackIdeTargets mcwd params = do
@@ -185,13 +142,6 @@ callStackIdePackages mcwd = do
         [ "packages" .= ls
         ]
     _ -> pure $ mkCommandError ["ide", "packages"] so
-
-callStackUninstall :: Maybe FilePath -> IO ToolResult
-callStackUninstall mcwd = do
-  so <- runStackRaw mcwd ["uninstall"]
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
-    _ -> mkCommandError ["uninstall"] so
 
 callStackUpgrade :: Maybe FilePath -> Value -> IO ToolResult
 callStackUpgrade mcwd params = do

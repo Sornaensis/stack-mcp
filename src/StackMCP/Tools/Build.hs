@@ -20,7 +20,6 @@ tools =
   , stackRunDef
   , stackCleanDef
   , stackPurgeDef
-  , stackHpcReportDef
   , stackTypecheckDef
   ]
 
@@ -34,7 +33,6 @@ dispatch mcwd name params = case name of
   "stack_run"     -> Just $ callStackRun mcwd params
   "stack_clean"   -> Just $ callStackClean mcwd params
   "stack_purge"      -> Just $ callStackPurge mcwd
-  "stack_hpc_report" -> Just $ callStackHpcReport mcwd params
   "stack_typecheck"  -> Just $ callStackTypecheck mcwd params
   _                  -> Nothing
 
@@ -139,17 +137,6 @@ stackTypecheckDef = ToolDef "stack_typecheck"
     , ("ghc_options", strProp "Additional GHC options.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
-    ] []
-
-stackHpcReportDef :: ToolDef
-stackHpcReportDef = ToolDef "stack_hpc_report"
-  "Generate a unified HPC code coverage report from .tix files produced by a previous --coverage test run. \
-  \Returns the report location. Use after stack_test with coverage=true." $
-  mkSchema
-    [ ("target", strProp "Specific target or .tix file. Omit to use the default project target.")
-    , ("all", boolProp "Use results from all packages and components involved in previous --coverage run (--all).")
-    , ("destdir", strProp "Output directory for the HTML report.")
-    , ("open", boolProp "Open the report in the browser (--open).")
     ] []
 
 ------------------------------------------------------------------------
@@ -317,21 +304,3 @@ callStackTypecheck mcwd params = do
           ++ ["--ghc-options", "-fno-code"]
           ++ ["--ghc-options" | not (T.null ghcOpts)] ++ [ghcOpts | not (T.null ghcOpts)]
   structuredBuild mcwd inclW inclO args
-
-callStackHpcReport :: Maybe FilePath -> Value -> IO ToolResult
-callStackHpcReport mcwd params = do
-  let target  = getParamText "target" params
-      allPkgs = getParamBool "all" params
-      destdir = getParamText "destdir" params
-      doOpen  = getParamBool "open" params
-      args = ["hpc", "report"]
-          ++ [target | not (T.null target)]
-          ++ ["--all" | allPkgs]
-          ++ ["--destdir" | not (T.null destdir)] ++ [destdir | not (T.null destdir)]
-          ++ ["--open" | doOpen]
-  so <- runStackBuild mcwd args
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object
-           [ "output"  .= soStdout so
-           ]
-    _ -> mkCommandError args so

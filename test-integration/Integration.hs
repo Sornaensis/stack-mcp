@@ -140,10 +140,6 @@ happyPathTests = testCaseSteps "happy path" $ \step ->
     assertBool "project-root contains myapp" $
       T.isInfixOf "myapp" (resultText r9)
 
-    step "stack_query"
-    r10 <- call cwdRef tm "stack_query" emptyParams
-    assertSuccess "stack_query" r10
-
     step "stack_ide_targets"
     r11 <- call cwdRef tm "stack_ide_targets" emptyParams
     assertSuccess "stack_ide_targets" r11

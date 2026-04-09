@@ -13,22 +13,16 @@ tools =
   [ stackNewDef
   , stackInitDef
   , stackSetupDef
-  , stackTemplatesDef
   , stackConfigSetDef
-  , stackConfigEnvDef
-  , stackConfigBuildFilesDef
   ]
 
 dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
 dispatch mcwd name params = case name of
-  "stack_new"                -> Just $ callStackNew mcwd params
-  "stack_init"               -> Just $ callStackInit mcwd params
-  "stack_setup"              -> Just $ callStackSetup mcwd params
-  "stack_templates"          -> Just $ callStackTemplates mcwd
-  "stack_config_set"         -> Just $ callStackConfigSet mcwd params
-  "stack_config_env"         -> Just $ callStackConfigEnv mcwd
-  "stack_config_build_files" -> Just $ callStackConfigBuildFiles mcwd
-  _                          -> Nothing
+  "stack_new"        -> Just $ callStackNew mcwd params
+  "stack_init"       -> Just $ callStackInit mcwd params
+  "stack_setup"      -> Just $ callStackSetup mcwd params
+  "stack_config_set" -> Just $ callStackConfigSet mcwd params
+  _                  -> Nothing
 
 ------------------------------------------------------------------------
 -- Definitions
@@ -58,11 +52,6 @@ stackSetupDef = ToolDef "stack_setup"
     [ ("ghc_version", strProp "Specific GHC version to install (optional, defaults to resolver's GHC).")
     ] []
 
-stackTemplatesDef :: ToolDef
-stackTemplatesDef = ToolDef "stack_templates"
-  "Show information about how to find templates for stack new." $
-  mkSchema [] []
-
 stackConfigSetDef :: ToolDef
 stackConfigSetDef = ToolDef "stack_config_set"
   "Set a Stack configuration value in stack.yaml or global config." $
@@ -71,16 +60,6 @@ stackConfigSetDef = ToolDef "stack_config_set"
     , ("value", strProp "Value to set.")
     , ("global", boolProp "Set in global config instead of project config (--global).")
     ] ["key", "value"]
-
-stackConfigEnvDef :: ToolDef
-stackConfigEnvDef = ToolDef "stack_config_env"
-  "Print environment variables for use in a shell. Returns key=value pairs." $
-  mkSchema [] []
-
-stackConfigBuildFilesDef :: ToolDef
-stackConfigBuildFilesDef = ToolDef "stack_config_build_files"
-  "Generate Cabal file from Hpack package.yaml and/or a lock file for Stack's project-level configuration." $
-  mkSchema [] []
 
 ------------------------------------------------------------------------
 -- Implementations
@@ -127,13 +106,6 @@ callStackSetup mcwd params = do
       ]
     _ -> mkCommandError args so
 
-callStackTemplates :: Maybe FilePath -> IO ToolResult
-callStackTemplates mcwd = do
-  so <- runStackRaw mcwd ["templates"]
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
-    _ -> mkCommandError ["templates"] so
-
 callStackConfigSet :: Maybe FilePath -> Value -> IO ToolResult
 callStackConfigSet mcwd params = do
   let key    = getParamText "key" params
@@ -148,29 +120,3 @@ callStackConfigSet mcwd params = do
         0 -> mkToolResultJSON $ object
           ["key" .= key, "value" .= val]
         _ -> mkCommandError args so
-
-callStackConfigEnv :: Maybe FilePath -> IO ToolResult
-callStackConfigEnv mcwd = do
-  so <- runStackRaw mcwd ["config", "env"]
-  case soExitCode so of
-    0 -> do
-      let ls = filter (not . T.null) $ T.lines (soStdout so)
-          kvs = [ object ["key" .= k, "value" .= T.drop 1 v]
-                  | line <- ls
-                  , let (k, v) = T.breakOn "=" line
-                  , not (T.null k)
-                  , not (T.null v)
-                  , T.head v == '='
-                  ]
-          skipped = length ls - length kvs
-      pure $ mkToolResultJSON $ object $
-        [ "variables" .= kvs ]
-        ++ ["skipped_lines" .= skipped | skipped > 0]
-    _ -> pure $ mkCommandError ["config", "env"] so
-
-callStackConfigBuildFiles :: Maybe FilePath -> IO ToolResult
-callStackConfigBuildFiles mcwd = do
-  so <- runStackRaw mcwd ["config", "build-files"]
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object ["output" .= soStdout so]
-    _ -> mkCommandError ["config", "build-files"] so
