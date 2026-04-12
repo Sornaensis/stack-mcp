@@ -17,7 +17,6 @@ tools =
   , stackBenchDef
   , stackHaddockDef
   , stackInstallDef
-  , stackRunDef
   , stackCleanDef
   ]
 
@@ -28,7 +27,6 @@ dispatch mcwd name params = case name of
   "stack_bench"   -> Just $ callStackBench mcwd params
   "stack_haddock" -> Just $ callStackHaddock mcwd params
   "stack_install" -> Just $ callStackInstall mcwd params
-  "stack_run"     -> Just $ callStackRun mcwd params
   "stack_clean"   -> Just $ callStackClean mcwd params
   _                  -> Nothing
 
@@ -94,18 +92,6 @@ stackInstallDef = ToolDef "stack_install"
   mkSchema
     [ ("targets", strProp "Space-separated targets to install.")
     , ("flags", strProp "Additional raw flags.")
-    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
-    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
-    ] []
-
-stackRunDef :: ToolDef
-stackRunDef = ToolDef "stack_run"
-  "Build and run an executable, returning when it exits. Defaults to the first available executable. \
-  \For long-running processes that need background monitoring, use task_run instead (via @stack-tasks)." $
-  mkSchema
-    [ ("executable", strProp "Name of the executable to run.")
-    , ("args", strProp "Space-separated arguments passed to the executable.")
-    , ("flags", strProp "Additional raw flags for stack run.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
     , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] []
@@ -238,25 +224,6 @@ callStackInstall mcwd params = do
       inclO   = getParamBool "include_output" params
       args    = ["install"] ++ targets ++ flags
   structuredBuild mcwd inclW inclO args
-
-callStackRun :: Maybe FilePath -> Value -> IO ToolResult
-callStackRun mcwd params = do
-  let exe   = getParamText "executable" params
-      rArgs = T.words (getParamText "args" params)
-      flags = T.words (getParamText "flags" params)
-      inclW = getParamBool "include_warnings" params
-      inclO = getParamBool "include_output" params
-      args = ["run"] ++ [exe | not (T.null exe)] ++ flags
-          ++ (if null rArgs then [] else "--" : rArgs)
-  so <- runStackRaw mcwd args
-  let diags = parseGhcDiagnostics (soStderr so)
-      depErrs = parseDepErrors (soStderr so)
-      mDiagSummary = filteredDiagnosticsSummary inclW diags
-  pure $ case soExitCode so of
-    0 -> mkToolResultJSON $ object $
-           ["output" .= soStdout so | inclO]
-             ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
-    _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
 
 callStackClean :: Maybe FilePath -> Value -> IO ToolResult
 callStackClean mcwd params = do

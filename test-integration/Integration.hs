@@ -115,11 +115,6 @@ happyPathTests = testCaseSteps "happy path" $ \step ->
     assertSuccess "stack_test" r5
 
     -- == Exec ==
-    step "stack_exec"
-    r6 <- call cwdRef tm "stack_exec"
-             (params [("command", String "myapp-exe")])
-    assertSuccess "stack_exec" r6
-
     step "stack_eval"
     r7 <- call cwdRef tm "stack_eval"
              (params [("expression", String "putStrLn \"hello from eval\"")])

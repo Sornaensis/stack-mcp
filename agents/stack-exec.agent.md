@@ -1,10 +1,9 @@
 ---
-description: "Stack execution subagent: one-shot run commands, GHCi queries, scripts, and Hoogle searches that return the first tool result immediately."
+description: "Stack execution subagent: one-shot GHCi queries, expression evaluation, scripts, and Hoogle searches that return the first tool result immediately."
 user-invocable: false
 tools:
   - stack_mcp/set_repo
   - stack_mcp/get_repo
-  - stack_mcp/stack_exec
   - stack_mcp/stack_ghci
   - stack_mcp/stack_ghc
   - stack_mcp/stack_eval
@@ -28,14 +27,13 @@ When prompted to perform an operation:
 
 **One-shot rule:** Each request expects exactly ONE tool invocation (after the optional `get_repo`/`set_repo` setup). Never make additional tool calls to investigate or retry a failure.
 
-**Definition of done:** An exec, ghc, eval, runghc, script, or hoogle request is complete once the selected tool returns its first result, regardless of success or failure.
+**Definition of done:** A ghc, eval, runghc, script, or hoogle request is complete once the selected tool returns its first result, regardless of success or failure.
 
 ## Available Tools
 
 | Tool | Purpose |
 |---|---|
 | `set_repo` / `get_repo` | Manage working directory |
-| `stack_exec` | Execute any command in the Stack environment (requires `command`) |
 | `stack_ghci` | Get GHCi session info (--no-load, does not start interactive session) |
 | `stack_ghc` | Run GHC directly with arguments (e.g. --version, -e 'expr') |
 | `stack_eval` | Evaluate a Haskell expression inline |
@@ -47,10 +45,11 @@ When prompted to perform an operation:
 
 - `stack_eval` is for quick expression evaluation.
 - `stack_runghc` and `stack_script` are for executing Haskell source files or Stack scripts.
-- `stack_exec` is for one-shot commands in the Stack environment.
 - `stack_ghc` is for direct GHC invocations.
 - `stack_ghci` is for non-interactive GHCi information.
 - `stack_hoogle` is for API search.
+
+To run arbitrary commands in the Stack environment, use **@stack-tasks** (`task_exec`).
 
 Do not switch from one execution tool to another to refine or verify output unless the caller explicitly asked for that second operation.
 
@@ -61,7 +60,5 @@ On first use of `stack_hoogle` in a project, pass `setup: true`. This builds had
 ## Notes
 
 - `stack_ghci` returns command info but does **not** start an interactive session. For interactive GHCi, use **@stack-tasks** (`task_ghci` + `task_ghci_eval`).
-- `stack_exec` runs a one-shot command. For long-running/background processes, use **@stack-tasks** (`task_exec`).
 - `stack_eval` is equivalent to `stack ghci -e "expression"`.
 - `stack_script` requires the script file to have a `{- stack ... -}` header or use `--resolver`.
-- `stack_exec` can run any tool installed in the Stack environment (hlint, ormolu, fourmolu, etc.).

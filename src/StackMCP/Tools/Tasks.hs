@@ -41,16 +41,16 @@ dispatch tm mcwd name params = case name of
 
 taskRunDef :: ToolDef
 taskRunDef = ToolDef "task_run"
-  "Spawn a background 'stack run' process. Returns a task ID for monitoring. \
-  \Use this for long-running executables (servers, daemons). For one-shot runs, use stack_run instead (via @stack-build)." $
+  "Spawn a 'stack run' process and return a task ID for monitoring via task_read. \
+  \Use task_read to retrieve output and task_kill to terminate." $
   mkSchema
     [ ("args", strProp "Arguments to pass to 'stack run' (e.g. target name, -- followed by program args).")
     ] []
 
 taskExecDef :: ToolDef
 taskExecDef = ToolDef "task_exec"
-  "Spawn a background 'stack exec' process. Returns a task ID for monitoring. \
-  \Use this for long-running or interactive commands. For one-shot commands, use stack_exec instead (via @stack-exec)." $
+  "Spawn a 'stack exec' process for any command in the Stack environment. \
+  \Returns a task ID for monitoring via task_read. Use task_kill to terminate." $
   mkSchema
     [ ("command", strProp "The command to execute in the Stack environment (required).")
     , ("args", strProp "Space-separated arguments for the command (passed after --).")

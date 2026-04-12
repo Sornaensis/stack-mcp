@@ -30,8 +30,8 @@ import StackMCP.Tools.Edit qualified as Edit
 
 tests :: TestTree
 tests = testGroup "ToolDefs"
-  [ testCase "total tool count is 50" $
-      length allTools @?= 50
+  [ testCase "total tool count is 48" $
+      length allTools @?= 48
 
   , testCase "all tool names are unique" $ do
       let names = map toolName allTools
@@ -56,7 +56,7 @@ tests = testGroup "ToolDefs"
         [ "set_repo", "get_repo"
         -- Build
         , "stack_build", "stack_test", "stack_bench"
-        , "stack_run", "stack_clean"
+        , "stack_clean"
         , "stack_haddock", "stack_install"
         -- Project
         , "stack_new", "stack_init", "stack_setup"
@@ -66,7 +66,6 @@ tests = testGroup "ToolDefs"
         , "stack_ls_snapshots", "stack_ls_globals"
         , "stack_update"
         -- Exec
-        , "stack_exec"
         , "stack_eval", "stack_runghc"
         , "stack_hoogle"
         -- Info
@@ -93,18 +92,17 @@ tests = testGroup "ToolDefs"
         , "project_add_component", "project_resolve_module"
         ]
 
-  , testCase "known tools list is exhaustive (covers all 50)" $ do
+  , testCase "known tools list is exhaustive (covers all 48)" $ do
       let known = sort
             [ "set_repo", "get_repo"
             , "stack_build", "stack_test", "stack_bench"
-            , "stack_run", "stack_clean"
+            , "stack_clean"
             , "stack_haddock", "stack_install"
             , "stack_new", "stack_init", "stack_setup"
             , "stack_config_set"
             , "stack_ls_dependencies"
             , "stack_ls_snapshots", "stack_ls_globals"
             , "stack_update"
-            , "stack_exec"
             , "stack_eval", "stack_runghc"
             , "stack_hoogle"
             , "stack_path"

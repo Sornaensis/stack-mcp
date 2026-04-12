@@ -1,5 +1,5 @@
 ---
-description: "Stack build subagent: one-shot compile, test, benchmark, document, install, and run requests that return the first tool result immediately. No discovery tools."
+description: "Stack build subagent: one-shot compile, test, benchmark, document, install requests that return the first tool result immediately. No discovery tools."
 user-invocable: false
 tools:
   - stack_mcp/set_repo
@@ -9,7 +9,6 @@ tools:
   - stack_mcp/stack_bench
   - stack_mcp/stack_haddock
   - stack_mcp/stack_install
-  - stack_mcp/stack_run
   - stack_mcp/stack_clean
   - stack_mcp/stack_test_run
   - stack_mcp/stack_bench_run
@@ -30,7 +29,7 @@ When prompted to perform an operation:
 
 **One-shot rule:** Each request from the caller expects exactly ONE tool invocation (after the optional `get_repo`/`set_repo` setup). Never make additional tool calls to investigate, diagnose, or retry a failure.
 
-**Definition of done:** A build, test, benchmark, run, clean, or report request is complete once the selected tool returns its first result, regardless of success or failure.
+**Definition of done:** A build, test, benchmark, clean, or report request is complete once the selected tool returns its first result, regardless of success or failure.
 
 ## Available Tools
 
@@ -42,7 +41,6 @@ When prompted to perform an operation:
 | `stack_bench` | Run benchmarks with optional --ba for benchmark arguments |
 | `stack_haddock` | Generate Haddock documentation with --open, --no-haddock-deps |
 | `stack_install` | Build and copy executables to local-bin-path |
-| `stack_run` | Build and run an executable with arguments |
 | `stack_clean` | Delete build artifacts (--full for .stack-work, purge=true for full reset) |
 | `stack_test_run` | Run a specific test suite with optional pattern matching (returns structured results) |
 | `stack_bench_run` | Run a specific benchmark suite with optional match pattern |
@@ -75,5 +73,4 @@ Discovery requests such as listing suites or test cases belong to **@stack-disco
 - Filter tests: `stack_test` with `ta: "--match pattern"` (tasty/hspec)
 - Run specific tests: `stack_test_run` with `suite` and optional `match` pattern
 - Run specific benchmarks: `stack_bench_run` with `suite` and optional `match` pattern
-- Run executable: `stack_run` with `executable` and `args`
 - Coverage report: `stack_test` with `coverage: true`, then `stack_hpc_report` with `all: true`

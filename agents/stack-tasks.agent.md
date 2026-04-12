@@ -59,10 +59,12 @@ When prompted to perform an operation:
 ## When to Use This Agent
 
 - **Long-running processes**: servers, file watchers, daemons → `task_run` or `task_exec`
+- **One-shot commands**: run any command in the Stack environment → `task_exec`
+- **Run executables**: build and run project executables → `task_run`
 - **Interactive GHCi**: exploring types, testing expressions, reloading modules → `task_ghci` + `task_ghci_eval`
 - **Background commands**: anything that shouldn't block → `task_exec`
 
-For one-shot commands that return immediately, prefer `stack_run` (via @stack-build) or `stack_exec` / `stack_eval` (via @stack-exec).
+For expression evaluation, use `stack_eval` (via @stack-exec). For running Haskell scripts, use `stack_runghc` or `stack_script` (via @stack-exec).
 
 Do not follow `task_run`, `task_exec`, or `task_ghci` with `task_read`, `task_write`, `task_ghci_eval`, or `task_kill` unless the caller explicitly asked for that second action in the same request.
 

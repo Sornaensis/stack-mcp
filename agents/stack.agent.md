@@ -44,12 +44,12 @@ Route tasks to the correct subagent based on the request:
 
 | Task Category | Subagent | When to Use |
 |---|---|---|
-| Building, testing, benchmarking | **@stack-build** | Compile, test, bench, haddock, install, run, clean |
+| Building, testing, benchmarking | **@stack-build** | Compile, test, bench, haddock, install, clean |
 | Discovery | **@stack-discovery** | List test suites, list tests within a suite, list benchmark suites |
 | Project scaffolding & config | **@stack-project** | New projects, init, setup GHC, templates, config |
 | Dependencies & packages | **@stack-deps** | List deps, snapshots, package index, dot graph, sdist, upload |
-| Running code & GHC | **@stack-exec** | exec, ghci info, ghc, eval, runghc, script, hoogle |
-| Background & interactive | **@stack-tasks** | Long-running processes, interactive GHCi sessions, task management |
+| GHC & evaluation | **@stack-exec** | ghci info, ghc, eval, runghc, script, hoogle |
+| Running & background | **@stack-tasks** | Run executables, exec commands, interactive GHCi sessions, task management |
 | Project editing & refactoring | **@stack-edit** | Add/remove dependencies and extra-deps, create/remove/expose/rename/resolve modules, ghc-options, default-extensions, add components |
 | Path/query/info | **@stack-info** | Inspect paths, query metadata, list tools, IDE targets, upgrade |
 

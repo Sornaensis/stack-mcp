@@ -11,15 +11,13 @@ import StackMCP.Tools.Parse (parseGhcDiagnostics, filteredDiagnosticsSummary, pa
 
 tools :: [ToolDef]
 tools =
-  [ stackExecDef
-  , stackEvalDef
+  [ stackEvalDef
   , stackRunghcDef
   , stackHoogleDef
   ]
 
 dispatch :: Maybe FilePath -> Text -> Value -> Maybe (IO ToolResult)
 dispatch mcwd name params = case name of
-  "stack_exec"   -> Just $ callStackExec mcwd params
   "stack_eval"   -> Just $ callStackEval mcwd params
   "stack_runghc" -> Just $ callStackRunghc mcwd params
   "stack_hoogle" -> Just $ callStackHoogle mcwd params
@@ -28,18 +26,6 @@ dispatch mcwd name params = case name of
 ------------------------------------------------------------------------
 -- Definitions
 ------------------------------------------------------------------------
-
-stackExecDef :: ToolDef
-stackExecDef = ToolDef "stack_exec"
-  "Execute a one-shot command in the Stack environment (with Stack's PATH and GHC available). \
-  \Returns immediately with exit code and output. For long-running or interactive processes, \
-  \use task_exec instead (via @stack-tasks)." $
-  mkSchema
-    [ ("command", strProp "The command to execute (required).")
-    , ("args", strProp "Space-separated arguments for the command.")
-    , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
-    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
-    ] ["command"]
 
 stackEvalDef :: ToolDef
 stackEvalDef = ToolDef "stack_eval"
@@ -77,25 +63,6 @@ stackHoogleDef = ToolDef "stack_hoogle"
 ------------------------------------------------------------------------
 -- Implementations
 ------------------------------------------------------------------------
-
-callStackExec :: Maybe FilePath -> Value -> IO ToolResult
-callStackExec mcwd params = do
-  let cmd     = getParamText "command" params
-      cmdArgs = T.words (getParamText "args" params)
-      inclW   = getParamBool "include_warnings" params
-      inclO   = getParamBool "include_output" params
-  if T.null cmd
-    then pure $ mkToolError "command parameter is required"
-    else do
-      let args = ["exec", cmd, "--"] ++ cmdArgs
-      so <- runStackRaw mcwd args
-      let diags = parseGhcDiagnostics (soStderr so)
-          mDiag = filteredDiagnosticsSummary inclW diags
-      pure $ mkToolResultJSON $ object $
-        [ "exit_code" .= soExitCode so
-        ] ++ ["stdout" .= soStdout so | inclO]
-          ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
-          ++ ["stderr" .= soStderr so | inclO && soExitCode so /= 0 && null diags]
 
 callStackEval :: Maybe FilePath -> Value -> IO ToolResult
 callStackEval mcwd params = do
