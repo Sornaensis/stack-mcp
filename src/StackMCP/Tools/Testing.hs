@@ -8,7 +8,6 @@ module StackMCP.Tools.Testing
   , parseTastyCounts
   ) where
 
-import Data.Maybe (isJust)
 import Data.Text qualified as T
 import StackMCP.Tools.Common
 import StackMCP.Tools.Parse (parseTestFailures, testFailuresSummary, parseGhcDiagnostics, filteredDiagnosticsSummary, readInt)
@@ -55,7 +54,6 @@ stackTestRunDef = ToolDef "stack_test_run"
     , ("ta", strProp "Raw test arguments passed via --ta.")
     , ("flags", strProp "Additional raw flags for stack test.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
-    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] ["suite"]
 
 stackBenchDiscoverDef :: ToolDef
@@ -73,7 +71,6 @@ stackBenchRunDef = ToolDef "stack_bench_run"
     , ("ba", strProp "Raw benchmark arguments passed via --ba.")
     , ("flags", strProp "Additional raw flags for stack bench.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
-    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] ["suite"]
 
 ------------------------------------------------------------------------
@@ -144,7 +141,6 @@ callTestRun mcwd params = do
       rawTa     = getParamText "ta" params
       flags     = T.words (getParamText "flags" params)
       inclW     = getParamBool "include_warnings" params
-      inclO     = getParamBool "include_output" params
   if T.null suite
     then pure $ mkToolError "suite parameter is required"
     else do
@@ -166,15 +162,13 @@ callTestRun mcwd params = do
           diags      = parseGhcDiagnostics (soStderr so)
           mDiagSummary = filteredDiagnosticsSummary inclW diags
           counts     = parsedCounts combined
-          hasStructured = not (null failures) || not (null counts) || isJust mDiagSummary
           result     = object $
             [ "suite"   .= suite
-            ] ++ ["output" .= soStdout so | inclO]
-              ++ counts
+            ] ++ counts
               ++ (if null failures then []
                   else ["test_failures" .= testFailuresSummary failures])
               ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
-              ++ ["raw_stderr" .= soStderr so | not success && (inclO || not hasStructured)]
+              ++ ["raw_stderr" .= soStderr so | not success && null diags && null failures]
       pure $ if success
         then mkToolResultJSON result
         else mkToolErrorJSON result
@@ -198,7 +192,6 @@ callBenchRun mcwd params = do
       rawBa  = getParamText "ba" params
       flags  = T.words (getParamText "flags" params)
       inclW  = getParamBool "include_warnings" params
-      inclO  = getParamBool "include_output" params
   if T.null suite
     then pure $ mkToolError "suite parameter is required"
     else do
@@ -213,13 +206,11 @@ callBenchRun mcwd params = do
           diags    = parseGhcDiagnostics (soStderr so)
           mDiagSummary = filteredDiagnosticsSummary inclW diags
           counts   = parsedCounts combined
-          hasStructured = not (null counts) || isJust mDiagSummary
           result   = object $
             [ "suite"   .= suite
-            ] ++ ["output" .= soStdout so | inclO]
-              ++ counts
+            ] ++ counts
               ++ maybe [] (\d -> ["diagnostics" .= d]) mDiagSummary
-              ++ ["raw_stderr" .= soStderr so | not success && (inclO || not hasStructured)]
+              ++ ["raw_stderr" .= soStderr so | not success && null diags]
       pure $ if success
         then mkToolResultJSON result
         else mkToolErrorJSON result

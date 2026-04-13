@@ -299,14 +299,6 @@ testFailureTests = testCaseSteps "test failure parsing" $ \step ->
       || T.isInfixOf "total" txt
       || T.isInfixOf "raw_stderr" txt
 
-    step "stack_test with include_output"
-    r4 <- call cwdRef tm "stack_test"
-            (params [("include_output", Bool True)])
-    assertIsError "stack_test with output" r4
-    let txt4 = resultText r4
-    assertBool "raw_output present when requested" $
-      T.isInfixOf "raw_output" txt4 || T.isInfixOf "output" txt4
-
 ------------------------------------------------------------------------
 -- Test/Bench run parsing: exercise stack_test_run and stack_bench_run
 ------------------------------------------------------------------------
@@ -354,14 +346,6 @@ testRunParsingTests = testCaseSteps "test/bench run parsing" $ \step ->
       T.isInfixOf "test_failures" txt3
       || T.isInfixOf "diagnostics" txt3
       || T.isInfixOf "raw_stderr" txt3
-
-    step "stack_test_run with include_output (should include output)"
-    r4 <- call cwdRef tm "stack_test_run"
-            (params [ ("suite", String "runapp:test:runapp-test")
-                    , ("include_output", Bool True) ])
-    assertIsError "stack_test_run with output" r4
-    assertBool "test_run output present" $
-      T.isInfixOf "output" (resultText r4)
 
     -- == Add a benchmark component and test stack_bench_run ==
     step "add benchmark component"

@@ -34,7 +34,6 @@ stackEvalDef = ToolDef "stack_eval"
   mkSchema
     [ ("expression", strProp "Haskell expression to evaluate (required).")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
-    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] ["expression"]
 
 stackRunghcDef :: ToolDef
@@ -45,7 +44,6 @@ stackRunghcDef = ToolDef "stack_runghc"
     [ ("file", strProp "Path to the Haskell source file (required).")
     , ("args", strProp "Additional arguments.")
     , ("include_warnings", boolProp "Include GHC warnings in the response (default: false).")
-    , ("include_output", boolProp "Include raw stdout/stderr in the response (default: false).")
     ] ["file"]
 
 stackHoogleDef :: ToolDef
@@ -68,7 +66,6 @@ callStackEval :: Maybe FilePath -> Value -> IO ToolResult
 callStackEval mcwd params = do
   let expr  = getParamText "expression" params
       inclW = getParamBool "include_warnings" params
-      inclO = getParamBool "include_output" params
   if T.null expr
     then pure $ mkToolError "expression parameter is required"
     else do
@@ -81,14 +78,13 @@ callStackEval mcwd params = do
         0 -> mkToolResultJSON $ object $
                [ "result"    .= T.strip (soStdout so)
                ] ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
-        _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
+        _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
 
 callStackRunghc :: Maybe FilePath -> Value -> IO ToolResult
 callStackRunghc mcwd params = do
   let file    = getParamText "file" params
       rArgs   = T.words (getParamText "args" params)
       inclW   = getParamBool "include_warnings" params
-      inclO   = getParamBool "include_output" params
   if T.null file
     then pure $ mkToolError "file parameter is required"
     else do
@@ -99,9 +95,9 @@ callStackRunghc mcwd params = do
           mDiag = filteredDiagnosticsSummary inclW diags
       pure $ case soExitCode so of
         0 -> mkToolResultJSON $ object $
-               ["stdout" .= soStdout so | inclO]
+               ["stdout" .= soStdout so]
                  ++ maybe [] (\d -> ["diagnostics" .= d]) mDiag
-        _ -> mkCommandErrorFiltered inclW inclO args so diags depErrs mcwd
+        _ -> mkCommandErrorFiltered inclW args so diags depErrs mcwd
 
 callStackHoogle :: Maybe FilePath -> Value -> IO ToolResult
 callStackHoogle mcwd params = do
