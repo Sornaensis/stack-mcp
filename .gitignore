@@ -36,3 +36,6 @@ Desktop.ini
 *.iml
 tags
 TAGS
+
+## Project Files
+.hmem.workspace
