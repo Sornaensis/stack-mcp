@@ -2,16 +2,16 @@
 description: "Stack build subagent: one-shot compile, test, benchmark, document, install requests that return the first tool result immediately. No discovery tools."
 user-invocable: false
 tools:
-  - stack_mcp/set_repo
-  - stack_mcp/get_repo
-  - stack_mcp/stack_build
-  - stack_mcp/stack_test
-  - stack_mcp/stack_bench
-  - stack_mcp/stack_haddock
-  - stack_mcp/stack_install
-  - stack_mcp/stack_clean
-  - stack_mcp/stack_test_run
-  - stack_mcp/stack_bench_run
+  - stack_mcp_set_repo
+  - stack_mcp_get_repo
+  - stack_mcp_stack_build
+  - stack_mcp_stack_test
+  - stack_mcp_stack_bench
+  - stack_mcp_stack_haddock
+  - stack_mcp_stack_install
+  - stack_mcp_stack_clean
+  - stack_mcp_stack_test_run
+  - stack_mcp_stack_bench_run
 ---
 
 # Stack Build Agent
@@ -73,4 +73,4 @@ Discovery requests such as listing suites or test cases belong to **@stack-disco
 - Filter tests: `stack_test` with `ta: "--match pattern"` (tasty/hspec)
 - Run specific tests: `stack_test_run` with `suite` and optional `match` pattern
 - Run specific benchmarks: `stack_bench_run` with `suite` and optional `match` pattern
-- Coverage report: `stack_test` with `coverage: true`, then `stack_hpc_report` with `all: true`
+- Coverage report: run `stack_test` with `coverage: true`

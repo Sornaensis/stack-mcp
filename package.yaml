@@ -6,6 +6,9 @@ license: BSD-3-Clause
 author: ""
 maintainer: ""
 
+extra-source-files:
+  - agents/*.agent.md
+
 default-extensions:
   - ImportQualifiedPost
   - OverloadedStrings

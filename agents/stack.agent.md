@@ -1,10 +1,10 @@
 ---
 description: "Stack orchestrator: routes Haskell Stack tasks to the correct subagent and returns the first subagent result immediately."
 tools:
-  - stack_mcp/set_repo
-  - stack_mcp/get_repo
-  - stack_mcp/stack_pipeline
-  - stack_mcp/stack_config_read
+  - stack_mcp_set_repo
+  - stack_mcp_get_repo
+  - stack_mcp_stack_pipeline
+  - stack_mcp_stack_config_read
   - agent
 agents:
   - stack-build
@@ -48,7 +48,7 @@ Route tasks to the correct subagent based on the request:
 | Discovery | **@stack-discovery** | List test suites, list tests within a suite, list benchmark suites |
 | Project scaffolding & config | **@stack-project** | New projects, init, setup GHC, templates, config |
 | Dependencies & packages | **@stack-deps** | List deps, snapshots, package index, dot graph, sdist, upload |
-| GHC & evaluation | **@stack-exec** | ghci info, ghc, eval, runghc, script, hoogle |
+| GHC & evaluation | **@stack-exec** | eval, runghc, hoogle |
 | Running & background | **@stack-tasks** | Run executables, exec commands, interactive GHCi sessions, task management |
 | Project editing & refactoring | **@stack-edit** | Add/remove dependencies and extra-deps, create/remove/expose/rename/resolve modules, ghc-options, default-extensions, add components |
 | Path/query/info | **@stack-info** | Inspect paths, query metadata, list tools, IDE targets, upgrade |

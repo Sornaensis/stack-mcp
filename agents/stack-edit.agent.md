@@ -2,19 +2,19 @@
 description: "Stack edit subagent: one project edit action per request, returning the first tool result immediately."
 user-invocable: false
 tools:
-  - stack_mcp/set_repo
-  - stack_mcp/get_repo
-  - stack_mcp/project_dependency
-  - stack_mcp/project_add_module
-  - stack_mcp/project_expose_module
-  - stack_mcp/project_rename_module
-  - stack_mcp/project_remove_module
-  - stack_mcp/project_list_modules
-  - stack_mcp/project_extra_dep
-  - stack_mcp/project_set_ghc_options
-  - stack_mcp/project_extension
-  - stack_mcp/project_add_component
-  - stack_mcp/project_resolve_module
+  - stack_mcp_set_repo
+  - stack_mcp_get_repo
+  - stack_mcp_project_dependency
+  - stack_mcp_project_add_module
+  - stack_mcp_project_expose_module
+  - stack_mcp_project_rename_module
+  - stack_mcp_project_remove_module
+  - stack_mcp_project_list_modules
+  - stack_mcp_project_extra_dep
+  - stack_mcp_project_set_ghc_options
+  - stack_mcp_project_extension
+  - stack_mcp_project_add_component
+  - stack_mcp_project_resolve_module
 ---
 
 # Stack Edit Agent

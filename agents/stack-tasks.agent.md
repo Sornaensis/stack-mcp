@@ -2,16 +2,16 @@
 description: "Stack tasks subagent: handle one background or interactive task action per request and return the first tool result immediately."
 user-invocable: false
 tools:
-  - stack_mcp/set_repo
-  - stack_mcp/get_repo
-  - stack_mcp/task_run
-  - stack_mcp/task_exec
-  - stack_mcp/task_ghci
-  - stack_mcp/task_ghci_eval
-  - stack_mcp/task_read
-  - stack_mcp/task_write
-  - stack_mcp/task_kill
-  - stack_mcp/task_list
+  - stack_mcp_set_repo
+  - stack_mcp_get_repo
+  - stack_mcp_task_run
+  - stack_mcp_task_exec
+  - stack_mcp_task_ghci
+  - stack_mcp_task_ghci_eval
+  - stack_mcp_task_read
+  - stack_mcp_task_write
+  - stack_mcp_task_kill
+  - stack_mcp_task_list
 ---
 
 # Stack Tasks Agent
@@ -64,7 +64,7 @@ When prompted to perform an operation:
 - **Interactive GHCi**: exploring types, testing expressions, reloading modules → `task_ghci` + `task_ghci_eval`
 - **Background commands**: anything that shouldn't block → `task_exec`
 
-For expression evaluation, use `stack_eval` (via @stack-exec). For running Haskell scripts, use `stack_runghc` or `stack_script` (via @stack-exec).
+For expression evaluation, use `stack_eval` (via @stack-exec). For running Haskell files, use `stack_runghc` (via @stack-exec).
 
 Do not follow `task_run`, `task_exec`, or `task_ghci` with `task_read`, `task_write`, `task_ghci_eval`, or `task_kill` unless the caller explicitly asked for that second action in the same request.
 

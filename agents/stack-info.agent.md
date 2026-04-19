@@ -2,12 +2,12 @@
 description: "Stack info subagent: one metadata or environment query per request, returning the first tool result immediately."
 user-invocable: false
 tools:
-  - stack_mcp/set_repo
-  - stack_mcp/get_repo
-  - stack_mcp/stack_path
-  - stack_mcp/stack_ls_tools
-  - stack_mcp/stack_ide_info
-  - stack_mcp/stack_upgrade
+  - stack_mcp_set_repo
+  - stack_mcp_get_repo
+  - stack_mcp_stack_path
+  - stack_mcp_stack_ls_tools
+  - stack_mcp_stack_ide_info
+  - stack_mcp_stack_upgrade
 ---
 
 # Stack Info Agent

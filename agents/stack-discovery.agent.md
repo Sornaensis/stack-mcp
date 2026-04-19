@@ -2,10 +2,10 @@
 description: "Stack discovery subagent: one discovery request per call for listing test suites, test cases, and benchmark suites, returning the first tool result immediately."
 user-invocable: false
 tools:
-  - stack_mcp/set_repo
-  - stack_mcp/get_repo
-  - stack_mcp/stack_test_discover
-  - stack_mcp/stack_bench_discover
+  - stack_mcp_set_repo
+  - stack_mcp_get_repo
+  - stack_mcp_stack_test_discover
+  - stack_mcp_stack_bench_discover
 ---
 
 # Stack Discovery Agent
