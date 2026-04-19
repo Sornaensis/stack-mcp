@@ -73,17 +73,24 @@ main = do
     putStrLn "\nInstalling agents..."
     installAgents projectDir
 
+  when (target == "all" || target == "opencode") $ do
+    putStrLn "\nConfiguring OpenCode..."
+    dest <- opencodeConfigPath
+    installConfig "mcp" dest exePath
+    putStrLn "\nInstalling OpenCode agents..."
+    installOpenCodeAgents projectDir
+
   putStrLn "\n=== Installation complete ==="
-  putStrLn "Restart Claude Code / VS Code to pick up the new MCP server."
+  putStrLn "Restart Claude Code / VS Code / OpenCode to pick up the new MCP server."
 
 parseArgs :: [String] -> IO InstallOptions
 parseArgs rawArgs =
   case filter (/= "--config-only") rawArgs of
     [] -> pure $ InstallOptions "all" configOnly
-    [target] | target `elem` ["all", "claude", "copilot"] ->
+    [target] | target `elem` ["all", "claude", "copilot", "opencode"] ->
       pure $ InstallOptions target configOnly
     _ -> do
-      putStrLn "Usage: stack-mcp-install [all|claude|copilot] [--config-only]"
+      putStrLn "Usage: stack-mcp-install [all|claude|copilot|opencode] [--config-only]"
       putStrLn "       --config-only reuses the existing installed executable, updates config files,"
       putStrLn "       and still installs Copilot agent files when targeting Copilot."
       exitFailure
@@ -205,6 +212,16 @@ copilotConfigPath
       configDir <- getXdgDirectory XdgConfig ""
       pure $ configDir </> "Code" </> "User" </> "mcp.json"
 
+opencodeConfigPath :: IO FilePath
+opencodeConfigPath = do
+  home <- getHomeDirectory
+  pure $ home </> ".config" </> "opencode" </> "opencode.json"
+
+opencodeAgentsDir :: IO FilePath
+opencodeAgentsDir = do
+  home <- getHomeDirectory
+  pure $ home </> ".config" </> "opencode" </> "agents"
+
 -- | VS Code Copilot user-level agents directory.
 copilotAgentsDir :: IO FilePath
 copilotAgentsDir
@@ -241,6 +258,24 @@ installAgents projectDir = do
       ) agentFiles
     putStrLn $ "  " ++ show (length agentFiles) ++ " agents installed to " ++ destDir
 
+installOpenCodeAgents :: FilePath -> IO ()
+installOpenCodeAgents projectDir = do
+  let agentsDir = projectDir </> "opencode-agents"
+  hasAgents <- doesDirectoryExist agentsDir
+  unless hasAgents $ do
+    putStrLn "  WARNING: opencode-agents/ directory not found, skipping"
+    pure ()
+  when hasAgents $ do
+    destDir <- opencodeAgentsDir
+    createDirectoryIfMissing True destDir
+    files <- listDirectory agentsDir
+    let agentFiles = filter (".md" `isSuffixOf`) files
+    mapM_ (\f -> do
+      copyFile (agentsDir </> f) (destDir </> f)
+      putStrLn $ "  Installed: " ++ f
+      ) agentFiles
+    putStrLn $ "  " ++ show (length agentFiles) ++ " OpenCode agents installed to " ++ destDir
+
 ------------------------------------------------------------------------
 -- Config merge (upserts stack_mcp into existing config)
 ------------------------------------------------------------------------
@@ -262,6 +297,11 @@ installConfig serverKey destPath exePath = do
 
 serverEntryValue :: String -> FilePath -> JValue
 serverEntryValue key exePath
+  | key == "mcp" = -- OpenCode format
+      JObj [ ("type", JStr "local")
+           , ("command", JArr [JStr (jsonEscapeRaw exePath)])
+           , ("enabled", JBool True)
+           ]
   | key == "servers" = -- copilot format
       JObj [ ("type", JStr "stdio")
            , ("command", JStr (jsonEscapeRaw exePath))

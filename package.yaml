@@ -8,6 +8,7 @@ maintainer: ""
 
 extra-source-files:
   - agents/*.agent.md
+  - opencode-agents/*.md
 
 default-extensions:
   - ImportQualifiedPost

@@ -4,6 +4,7 @@ import Test.Tasty
 import System.IO (hSetEncoding, stdout, stderr, utf8)
 
 import qualified AgentManifestTests
+import qualified OpenCodeAgentTests
 import qualified ParseTests
 import qualified CommonTests
 import qualified TypesTests
@@ -17,6 +18,7 @@ main = do
   hSetEncoding stderr utf8
   defaultMain $ testGroup "stack-mcp"
     [ AgentManifestTests.tests
+    , OpenCodeAgentTests.tests
     , ParseTests.tests
     , CommonTests.tests
     , TypesTests.tests
